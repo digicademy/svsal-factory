@@ -5,10 +5,6 @@ from api import create_api_app
 
 app = create_api_app(os.getenv('FLASK_CONFIG') or 'default')
 
-#app.register_blueprint(api_v1)
-#app.register_blueprint(api_v1_blueprint, url_prefix='/v1')
-# app.register_blueprint(api_vX_blueprint)
-
 
 @app.shell_context_processor
 def make_shell_context():

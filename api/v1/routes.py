@@ -1,14 +1,28 @@
-from flask_restplus import Resource, fields
-from flask import jsonify
+from flask_restplus import Resource
 from api.v1 import api_v1
+from api.tasks import async_api
+import time
 
-# routing here
+
+# ++++ V1 ROUTES ++++
 
 
 @api_v1.route('/')
 class HelloWorld(Resource):
     def get(self):
-        return {'hello': 'world'}
+        return {'status': 'test_ok'}
+
+
+@api_v1.route('/testasync')
+class LongRunningTask(Resource):
+    @async_api
+    def get(self, path=''):
+        # perform some intensive processing
+        print("starting processing task, path: '%s'" % path)
+        time.sleep(20)
+        print("completed processing task, path: '%s'" % path)
+        return {'answer': 'processed'}
+
 
 '''
 @api_v1.errorhandler(404)
