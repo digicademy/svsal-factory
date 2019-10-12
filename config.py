@@ -3,8 +3,6 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 
 class Config:
-    #SF_ADMIN = os.environ.get('SF_ADMIN')
-
     @staticmethod
     def init_app(app):
         pass

@@ -1,6 +1,8 @@
 from flask_restplus import Resource
+from flask import request
 from api.v1 import api_v1
 from api.tasks import async_api
+from api.v1.works import factory as work_factory
 import time
 
 
@@ -18,9 +20,25 @@ class LongRunningTask(Resource):
     @async_api
     def get(self, path=''):
         # perform some intensive processing
-        print("starting processing task, path: '%s'" % path)
+        start = time.time()
+        print("Starting transformation, time: '%s'" % start)
         time.sleep(20)
-        print("completed processing task, path: '%s'" % path)
+        end = time.time()
+        print("Ending transformation, time: '%s'" % end)
+        return {'answer': 'processed'}
+
+
+@api_v1.route('/texts/<string:wid>')
+class WorkFactoryEvent(Resource):
+    @async_api
+    def post(self, wid, path=''):
+        start = time.time()
+        print("Starting transformation, time: '%s'" % start)
+        xml_data = request.data #.decode('utf-8')
+        work_factory.transform(wid, xml_data)
+        end = time.time()
+        print("Ending transformation, time: '%s'" % end)
+        print('Elapsed time: ', end - start)
         return {'answer': 'processed'}
 
 
