@@ -1,5 +1,5 @@
 from lxml import etree
-from api.v1.works.xutils import flatten, xml_ns, is_element
+from api.v1.works.xutils import flatten, xml_ns, is_element, exists
 
 
 
@@ -54,6 +54,19 @@ is_page_elem = etree.XPath(page_elem_xpath, namespaces=xml_ns)
 list_ancestors_xpath = 'not(ancestor::*[' + main_elem_xpath + ' or ' + marginal_elem_xpath + '])'
 is_list_elem = etree.XPath(list_elem_xpath + ' and ' + list_ancestors_xpath, namespaces=xml_ns)
 
+basic_list_elem_xpath = \
+    """
+    boolean(
+        (self::tei:list and not(descendant::tei:list)) or
+        (
+            (self::tei:item or self::tei:head or self::tei:argument) and 
+             not(descendant::tei:list) and
+             following-sibling::tei:item[child::tei:list[""" + list_elem_xpath + """]]
+        )
+    )
+    """
+# read as: 'lists that do not contain lists (=lists at the lowest level), or siblings thereof' # TODO is this working?
+is_basic_list_elem = etree.XPath(basic_list_elem_xpath, namespaces=xml_ns)
 
 # TODO
 def validate(wid, tei_root):
@@ -115,3 +128,6 @@ def get_elem_type(elem):
     else:
         return ''
 
+
+def is_basic_elem(node):
+    return is_main_elem(node) or is_marginal_elem(node) or (is_list_elem(node) and is_basic_list_elem(node))
