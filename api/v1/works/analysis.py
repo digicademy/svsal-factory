@@ -79,16 +79,15 @@ def get_elem_type(elem):
 basic_list_elem_xpath = \
     """
     boolean(
-        (self::tei:list and not(descendant::tei:list)) or
-        (
-            (self::tei:item or self::tei:head or self::tei:argument) and 
-             not(descendant::tei:list) and
-             following-sibling::tei:item[child::tei:list[""" + list_elem_xpath + """]]
-        )
+        (self::tei:item and not(descendant::tei:list)) 
+        or
+        ((self::tei:argument or self::tei:head or self::tei:p) 
+            and not(ancestor::*[self::tei:item and not(descendant::tei:list)])
+            and not(ancestor::*[self::tei:argument or self::tei:head or self::tei:p]))
     )
     """
-
-# read as: 'lists that do not contain lists (=lists at the lowest level), or siblings thereof' # TODO is this working?
+# read as: 'items that do not contain lists, or other elements such as argument, head (add more elements there if
+# necessary!) that do not occur within such items'
 is_basic_list_elem = etree.XPath(basic_list_elem_xpath, namespaces=xml_ns)
 
 
@@ -190,6 +189,7 @@ def get_citetrail_name(elem):
         # @xml:id
         # xincludes resolved
         # basic structure: teiHeader, text, body
+        # every text node is within is_basic_element
         pass
 
     # TODO
