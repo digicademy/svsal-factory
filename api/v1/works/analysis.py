@@ -1,7 +1,5 @@
 from lxml import etree
-from api.v1.works.xutils import flatten, xml_ns, is_element, exists
-
-
+from api.v1.xutils import flatten, xml_ns, is_element, exists
 
 # Element type definitions
 structural_elem_xpath = \
@@ -65,6 +63,8 @@ basic_list_elem_xpath = \
         )
     )
     """
+
+
 # read as: 'lists that do not contain lists (=lists at the lowest level), or siblings thereof' # TODO is this working?
 is_basic_list_elem = etree.XPath(basic_list_elem_xpath, namespaces=xml_ns)
 
@@ -87,8 +87,14 @@ def extract_text_structure(wid, node):
         if len(node.xpath('./@xml:id')) and elem_type:
             print('Processing ' + elem_type + ' element: ' + node.tag + ' (' + node.xpath('./@xml:id')[0] + ')')
             sal_node = etree.Element('sal_node')
-            sal_node.set('n', node.xpath('./@xml:id')[0])
+            sal_node.set('id', node.xpath('./@xml:id')[0])
+            sal_node.set('name', etree.QName(node).localname)
             sal_node.set('type', elem_type)
+            citetrail_prefix = get_citetrail_prefix(node)
+            if is_basic_elem(node):
+                sal_node.set('basic', 'true')
+            if citetrail_prefix:
+                sal_node.set('citetrailPrefix', citetrail_prefix)
             sal_children = flatten([extract_text_structure(wid, child) for child in node])
             for sal_child in sal_children:
                 if etree.iselement(sal_child):
@@ -103,27 +109,56 @@ def extract_text_structure(wid, node):
         pass
 
 
+def get_citetrail_prefix(elem):
+    if is_page_elem(elem):
+        return 'p'
+    elif is_marginal_elem(elem):
+        return 'n'
+    elif is_anchor_elem(elem) and exists(elem, 'self::tei:milestone[@unit]'):
+        return elem.get('unit')
+    elif is_structural_elem(elem):
+        if exists(elem, 'self::tei:text[@type = "work_volume"]'):
+            return 'vol'
+        elif exists(elem, 'self::tei:front'):
+            return 'frontmatter'
+        elif exists(elem, 'self::tei:back'):
+            return 'backmatter'
+        else:
+            return ''
+    elif is_main_elem(elem):
+        if exists(elem, 'self::tei:head'):
+            return 'heading'
+        elif exists(elem, 'self::tei:titlePage'):
+            return 'titlepage'
+        else:
+            return ''
+    elif is_list_elem(elem):
+        if exists(elem, 'self::tei:list[@type = "dict" or @type = "index"]'):
+            return elem.get('type')
+        elif exists(elem, 'self::tei:item[ancestor::tei:list[@type = "dict"]]'):
+            return 'entry'
+        else:
+            return ''
+    else:
+        return ''
+
+
+
 def get_elem_type(elem):
     """
     Determines the type of an indexable element. If the element is not indexable, an empty string is returned.
     """
     if is_structural_elem(elem):
-        #print('Found structural element: ' + elem.tag)
         return 'structural'
     elif is_main_elem(elem):
-        #print('Found main element: ' + elem.tag)
         return 'main'
     elif is_marginal_elem(elem):
-        #print('Found marginal element: ' + elem.tag)
         return 'marginal'
     elif is_page_elem(elem):
-        #print('Found page element: ' + elem.tag)
         return 'page'
     elif is_anchor_elem(elem):
-        #print('Found anchor element: ' + elem.tag)
         return 'anchor'
     elif is_list_elem(elem):
-        #print('Found list element: ' + elem.tag)
         return 'list'
     else:
         return ''

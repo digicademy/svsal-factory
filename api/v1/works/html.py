@@ -1,21 +1,24 @@
 from lxml import etree
-from lxml.builder import E
-from api.v1.works.xutils import flatten, is_element, is_text_node, is_comment, is_processing_instruction, xml_ns, exists
+import re
+from api.v1.xutils import flatten, is_element, is_text_node, xml_ns, exists
 from api.v1.works.analysis import is_marginal_elem
 
 # TODO: simplify the following XPaths
 # determines whether hi occurs within a section with overwriting alignment information:
-hi_is_within_specific_alignment_section = etree.XPath('boolean(self::tei:hi[ancestor::tei:head or ' +
-                                                      'ancestor::tei:signed or ancestor::tei:titlePage or ' +
-                                                      'ancestor::tei:argument])',
-                                                      namespaces=xml_ns)
+hi_is_within_specific_alignment_section = \
+    etree.XPath('boolean(self::tei:hi[ancestor::tei:head or ' +
+                'ancestor::tei:signed or ancestor::tei:titlePage or ' +
+                'ancestor::tei:argument])',
+                namespaces=xml_ns)
 # determines whether hi's alignment information is "colliding" with alignment of other text nodes in the same section:
 basic_hi_containers = """self::tei:p or self::tei:head or self::tei:note or 
                          self::tei:item or self::tei:cell or self::tei:label or 
                          self::tei:signed or self::tei:lg or self::tei:titlePage"""
-hi_is_outlier_within_section = etree.XPath('boolean(ancestor::*[' + basic_hi_containers + '][1]'
-                                           + '//text()[not(ancestor::tei:hi[contains(@rendition, "#r-center")])])',
-                                           namespaces=xml_ns)
+hi_is_outlier_within_section = \
+    etree.XPath('boolean(ancestor::*[' + basic_hi_containers + '][1]'
+                + '//text()[not(ancestor::tei:hi[contains(@rendition, "#r-center")])])',
+                namespaces=xml_ns)
+
 
 def html_dispatch(node):
     if is_element(node):
@@ -24,17 +27,27 @@ def html_dispatch(node):
         # in that case, simply add a function (called 'html_' + element_localname) below
     elif is_text_node(node):
         return html_text_node(node)
-    elif is_comment(node) or is_processing_instruction(node):
-        pass
+    # omit comments and processing instructions
+
+
+def html_dispatch_multiple(nodes):
+    dispatched = []
+    for node in nodes:
+        dispatched.append(html_dispatch(node))
+    if len(dispatched) > 0:
+        return list(flatten(dispatched))
+    else:
+        return
 
 
 def html_text_node(node):
-    return str(node)
+    return re.sub(r'\s+', ' ', str(node))
+    #return " ".join(str(node).split()) # normalize space
 
 
 def html_passthru(node):
-    children = [html_dispatch(child) for child in node.xpath('node()') if not (is_element(node) and is_marginal_elem(node))]
-    return flatten(children)
+    children = [html_dispatch(child) for child in node.xpath('node()') if not (is_element(child) and is_marginal_elem(child))]
+    return list(flatten(children))
 
 
 def html_passthru_append(orig_node, new_node):
@@ -66,7 +79,7 @@ def html_abbr(node):
 
 
 def html_choice(node):
-    return html_passthru(node)
+    return html_dispatch_multiple(node.xpath('child::*'))
 
 
 def html_corr(node):
@@ -100,7 +113,7 @@ def html_hi(node):
         if s == '#b':
             css_classes.append('hi-b') # font-weight:bold;
         elif s == '#initCaps':
-            css_classes.append('hi-initCaps') # css style?
+            css_classes.append('hi-initcaps') # css style?
         elif s == '#it':
             css_classes.append('hi-it') # font-style:italic;
         elif s == '#rt':
@@ -108,10 +121,10 @@ def html_hi(node):
         elif s == '#l-indent':
             css_classes.append('hi-l-indent') # display:block;margin-left:4em;
         elif s == '#r-center' and not hi_is_within_specific_alignment_section(node) \
-            and not hi_is_outlier_within_section(node):
+                              and not hi_is_outlier_within_section(node):
             css_classes.append('hi-r-center') # display:block;text-align:center;
         elif s == '#right' and not hi_is_within_specific_alignment_section(node) \
-            and not exists(node, 'ancestor::tei:item'):
+                           and not exists(node, 'ancestor::tei:item'):
             css_classes.append('hi-right') # display:block;text-align:right;
         elif s == '#sc':
             css_classes.append('hi-sc') # font-variant:small-caps;
@@ -145,8 +158,22 @@ def html_orig_elem(node):
 
 
 def html_p(node):
-    p = etree.Element('p') # TODO
-    return html_passthru_append(node, p)
+    elem = None
+    # special contexts:
+    if exists(node, 'ancestor::tei:note'):
+        elem = etree.Element('span')
+        elem.set('class', 'p-note')
+    elif exists(node, 'ancestor::tei:item'):
+        elem = etree.Element('span')
+        elem.set('class', 'p-item')
+    elif exists(node, 'ancestor::tei:titlePage'):
+        elem = etree.Element('span')
+        elem.set('class', 'p-titlepage')
+    # main text:
+    else:
+        elem = etree.Element('p')
+        elem.set('class', 'p')
+    return html_passthru_append(node, elem)
 
 
 def html_sic(node):
