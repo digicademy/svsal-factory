@@ -2,6 +2,7 @@ from lxml import etree
 import re
 from api.v1.xutils import flatten, is_element, is_text_node, xml_ns, exists
 from api.v1.works.analysis import is_marginal_elem
+from api.v1.works.txt import *
 
 # TODO: simplify the following XPaths
 # determines whether hi occurs within a section with overwriting alignment information:
@@ -42,7 +43,6 @@ def html_dispatch_multiple(nodes):
 
 def html_text_node(node):
     return re.sub(r'\s+', ' ', str(node))
-    #return " ".join(str(node).split()) # normalize space
 
 
 def html_passthru(node):
@@ -139,11 +139,12 @@ def html_hi(node):
     return html_passthru_append(node, span)
 
 
-def html_lb(node):
-    if not node.get('break') == 'no':
-        return ' '
-    else:
-        pass
+
+# ELEMENT FUNCTIONS
+
+
+def html_cb(node):
+    return txt_cb(node, None)
 
 
 def html_orig_elem(node):
@@ -155,6 +156,10 @@ def html_orig_elem(node):
         return html_passthru_append(node, span)
     else:
         return html_passthru(node)
+
+
+def html_lb(node):
+    return txt_lb(node, None)
 
 
 def html_p(node):

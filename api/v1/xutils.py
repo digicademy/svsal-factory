@@ -1,4 +1,5 @@
 from lxml import etree
+import re
 
 
 xml_ns = {'xml': 'http://www.w3.org/XML/1998/namespace',
@@ -8,14 +9,15 @@ xml_ns = {'xml': 'http://www.w3.org/XML/1998/namespace',
 
 def flatten(l):
     for el in l:
-        if isinstance(el, list) and not isinstance(el, etree._Element):
+        if isinstance(el, list) and not (isinstance(el, etree._Element)):
             yield from flatten(el)
+        elif el is None:
+            yield ''
         else:
             yield el
 
 
 #is_element = etree.XPath('boolean(self::*)') # this throws an error with processing instructions ...
-
 is_comment = etree.XPath('boolean(self::comment())')
 is_processing_instruction = etree.XPath('boolean(self::processing-instruction())')
 
@@ -27,9 +29,13 @@ def is_text_node(node): # TODO is ElementStringResult really a simple text node?
 
 
 def is_element(node):
-    #return etree.iselement(node) and not isinstance(node, etree._ProcessingInstruction)
-    return isinstance(node, etree._Element)
+    return isinstance(node, etree._Element) and not isinstance(node, etree._ProcessingInstruction)
+    # _ProcessingInstruction is a subsubclass of _Element
 
 
 def exists(elem, xpath_expr):
     return elem.xpath('boolean(' + xpath_expr + ')', namespaces=xml_ns)
+
+
+def is_more_than_whitespace(string):
+    return bool(re.match(r'\S', string))

@@ -8,43 +8,56 @@ from api.v1.works.config import citation_labels
 
 
 structural_elem_xpath = \
-    'boolean(' + \
-    'self::tei:div[@type != "work_part"] or ' + \
-    'self::tei:back or ' + \
-    'self::tei:front or ' + \
-    'self::tei:text[@type = "work_volume"]' + \
-    ')'
+    """
+    boolean(
+        self::tei:div[@type != "work_part"] or
+        self::tei:back or 
+        self::tei:front or 
+        self::tei:text[@type = "work_volume"] 
+    )
+    """
 main_elem_xpath = \
-    'boolean(' + \
-    'self::tei:p or ' + \
-    'self::tei:signed or ' + \
-    'self::tei:head[not(ancestor::tei:list)] or ' + \
-    'self::tei:titlePage or ' + \
-    'self::tei:lg or ' + \
-    'self::tei:label[@place != "margin"] or ' + \
-    'self::tei:argument[not(ancestor::tei:list)] or ' + \
-    'self::tei:table' \
-    ')'
+    """
+    boolean( 
+        self::tei:p or  
+        self::tei:signed or  
+        self::tei:head[not(ancestor::tei:list)] or  
+        self::tei:titlePage or  
+        self::tei:lg or  
+        self::tei:label[@place != "margin"] or  
+        self::tei:argument[not(ancestor::tei:list)] or  
+        self::tei:table
+    )
+    """
 marginal_elem_xpath = \
-    'boolean(' \
-    'self::tei:note[@place = "margin"] or ' \
-    'self::tei:label[@place = "margin"]' \
-    ')'
+    """
+    boolean(
+        self::tei:note[@place = "margin"] or 
+        self::tei:label[@place = "margin"] 
+    )
+    """
 page_elem_xpath = \
-    'boolean(' \
-    'self::tei:pb[not(@sameAs or @corresp)]' \
-    ')'
+    """
+    boolean(
+        self::tei:pb[not(@sameAs or @corresp)]
+    )
+    """
 anchor_elem_xpath = \
-    'boolean(' \
-    'self::tei:milestone[@unit != "other"]' \
-    ')' # TODO: inline labels?
+    """
+    boolean(
+        self::tei:milestone[@unit != "other"]
+    )
+    """
+    # TODO: inline labels?
 list_elem_xpath = \
-    'boolean(' \
-    'self::tei:list or ' \
-    'self::tei:item or ' \
-    'self::tei:head[ancestor::tei:list] or ' \
-    'self::tei:argument[ancestor::tei:list]' \
-    ')'
+    """
+    boolean(
+        self::tei:list or 
+        self::tei:item or 
+        self::tei:head[ancestor::tei:list] or 
+        self::tei:argument[ancestor::tei:list]
+    )
+    """
 # XPath classes / functions
 is_structural_elem = etree.XPath(structural_elem_xpath, namespaces=xml_ns)
 main_ancestors_xpath = 'not(ancestor::*[' + main_elem_xpath + ' or ' + marginal_elem_xpath + ' or ' + list_elem_xpath + '])'
@@ -93,6 +106,15 @@ is_basic_list_elem = etree.XPath(basic_list_elem_xpath, namespaces=xml_ns)
 
 def is_basic_elem(node):
     return is_main_elem(node) or is_marginal_elem(node) or (is_list_elem(node) and is_basic_list_elem(node))
+
+
+def has_basic_ancestor(node):
+    basic_ancestor = False
+    for anc in node.xpath('ancestor::*'):
+        if is_basic_elem(anc):
+            basic_ancestor = True
+    return basic_ancestor
+    # TODO formulate this as a single xpath for increasing performance
 
 
 

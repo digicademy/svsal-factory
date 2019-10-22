@@ -63,3 +63,6 @@ class WorkConfig:
                 mappings[mapping.get('type')] = mapping.text
             chars[id] = mappings
         self.chars = chars
+
+    def get_citation_labels(self):
+        return self.citation_labels
