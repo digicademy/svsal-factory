@@ -46,7 +46,10 @@ def html_text_node(node):
 
 
 def html_passthru(node):
-    children = [html_dispatch(child) for child in node.xpath('node()') if not (is_element(child) and is_marginal_elem(child))]
+    children = [html_dispatch(child) for child in node.xpath('node()')
+                    if not (is_element(child) and (is_basic_elem(child) or is_structural_elem(child)))]
+    # not (is_basic_elem(child) or is_structural_elem(child)) makes sure that only teasers are processed for structural
+    # elements
     return list(flatten(children))
 
 
@@ -76,6 +79,15 @@ def html_passthru_append(orig_node, new_node):
 
 def html_abbr(node):
     return html_orig_elem(node)
+
+
+def html_argument(node):
+    argument = etree.Element('p')
+    argument.set('class', 'argument')
+    return html_passthru_append(node, argument) # TODO: css for argument if not is_basic_element
+
+
+# TODO: continue
 
 
 def html_choice(node):

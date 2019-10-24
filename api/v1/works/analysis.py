@@ -89,23 +89,38 @@ def get_elem_type(elem):
         return ''
 
 
-basic_list_elem_xpath = \
-    """
-    boolean(
-        (self::tei:item and not(descendant::tei:list)) 
-        or
-        ((self::tei:argument or self::tei:head or self::tei:p) 
-            and not(ancestor::*[self::tei:item and not(descendant::tei:list)])
-            and not(ancestor::*[self::tei:argument or self::tei:head or self::tei:p]))
-    )
-    """
+def is_basic_list_elem(elem):
+    return bool(is_list_elem(elem) and len(elem.xpath('ancestor::tei:list', namespaces=xml_ns)) == 0)
+    # top-level divs
+
+
+# old , slightly more complicated version - currently not in use since not manageable with HTML rendering for lists:
+#def is_basic_list_elem(elem):
+#    """
+#    Basic list elements are those list elements that occur as children of the top-level tei:list node.
+#    We refrain from more fine-grained splitting of lists into "basic" elements for keeping it simple, since definition
+#    of basic elements (item, head, argument, ...) on deeper levels can become quite difficult when lists are heavily nested.
+#    """
+#    return bool(is_list_elem(elem) and len(elem.xpath('ancestor::tei:list', namespaces=xml_ns)) == 1)
+
+# old, much more complicated version:
+#basic_list_elem_xpath = \
+
+    #boolean(
+    #    (self::tei:item and not(descendant::tei:list))
+    #    or
+    #    ((self::tei:argument or self::tei:head or self::tei:p)
+    #        and not(ancestor::*[self::tei:item and not(descendant::tei:list)])
+    #        and not(ancestor::*[self::tei:argument or self::tei:head or self::tei:p]))
+    #)
+
 # read as: 'items that do not contain lists, or other elements such as argument, head (add more elements there if
 # necessary!) that do not occur within such items'
-is_basic_list_elem = etree.XPath(basic_list_elem_xpath, namespaces=xml_ns)
+#is_basic_list_elem = etree.XPath(basic_list_elem_xpath, namespaces=xml_ns)
 
 
 def is_basic_elem(node):
-    return is_main_elem(node) or is_marginal_elem(node) or (is_list_elem(node) and is_basic_list_elem(node))
+    return is_main_elem(node) or is_marginal_elem(node) or is_basic_list_elem(node)
 
 
 def has_basic_ancestor(node):

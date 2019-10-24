@@ -1,7 +1,7 @@
 from lxml import etree
 import re
 from api.v1.xutils import flatten, is_element, is_text_node, exists, xml_ns
-from api.v1.works.analysis import is_basic_elem, has_basic_ancestor
+from api.v1.works.analysis import is_basic_elem, is_marginal_elem, is_structural_elem, has_basic_ancestor
 import api.v1.works.factory as factory
 
 
@@ -21,10 +21,21 @@ def txt_dispatch(node, mode):
 
 
 def txt_passthru(node, mode):
-    children = [txt_dispatch(child, mode) for child in node.xpath('node()')
-                                              if not (is_element(child) and is_basic_elem(child))]
-    # stop recursive processing at the basic_elem level; these elements are to be processed separately
-    return ''.join(list(flatten(children)))
+    if len(node.xpath('node()')) > 0:
+        children = []
+        for child in node.xpath('node()'):
+            if is_element(child):
+                if is_basic_elem(child) and is_marginal_elem(child):
+                    id = child.xpath('@xml:id', namespaces=xml_ns)[0]
+                    children.append('{%note:' + id + '%}')
+                    # placeholder for marginal note in main text: those must be reinserted later if necessary
+                    # TODO: use citetrail rather than xml:id? make sure that placeholders are excluded from searching/indexing
+                elif not is_structural_elem(child):
+                    # makes sure that structural elements yield only headings, not their nested content
+                    children.append(txt_dispatch(child, mode))
+            else:
+                children.append(txt_dispatch(child, mode))
+        return ''.join(list(flatten(children)))
 
 
 def txt_text_node(node):
@@ -84,7 +95,7 @@ def txt_expan(node, mode):
 
 
 def txt_figure(node, mode):
-    return ''
+    return
 
 
 def txt_g(node, mode):
@@ -107,7 +118,7 @@ def txt_g(node, mode):
 
 
 def txt_gap(node, mode):
-    return ''
+    return
 
 
 def txt_imprint(node, mode):
@@ -129,7 +140,7 @@ def txt_item(node, mode): # TODO test this, esp. with more complicated/nested li
 def txt_label(node, mode):
     text = txt_passthru(node, mode)
     if node.get('place') == 'margin':
-        return '{\n\t' + text + '\n}' # indent note text a bit
+        return '{\n\t' + text + '\n}' # TODO separate notes from surrounding text rather during final txt serialization?
     else:
         return text
 
@@ -141,7 +152,6 @@ def txt_l(node, mode):
 def txt_lb(node, mode):
     if not node.get('break') == 'no':
         return ' '
-    return
 
 
 def txt_list(node, mode): #nr
@@ -261,7 +271,7 @@ def txt_pubplace(node, mode):
 
 def txt_note(node, mode):
     text = txt_passthru(node, mode)
-    return '{\n\t' + text + '\n}'
+    return '{\n\t' + text + '\n}' # TODO separate notes from surrounding text rather during final txt serialization?
 
 
 def txt_orig(node, mode):
@@ -283,5 +293,3 @@ def txt_sic(node, mode):
         return
     else:
         return txt_passthru(node, mode)
-
-# search default return ()
