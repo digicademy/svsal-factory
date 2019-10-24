@@ -1,6 +1,8 @@
 from lxml import etree
 from api.v1.xutils import flatten, xml_ns, is_element, exists
-from api.v1.works.config import citation_labels
+from api.v1.works.txt import txt_dispatch, normalize_space
+from api.v1.works.factory import config
+import re
 
 
 
@@ -91,17 +93,10 @@ def get_elem_type(elem):
 
 def is_basic_list_elem(elem):
     return bool(is_list_elem(elem) and len(elem.xpath('ancestor::tei:list', namespaces=xml_ns)) == 0)
-    # top-level divs
+    # Only top-level lists count as basic elements. This might produce rather large basic txt/html units for long
+    # lists (such as indices), but defining regular, basic units on deeper list levels becomes quite difficult when
+    # lists are unevenly or deeply nested.
 
-
-# old , slightly more complicated version - currently not in use since not manageable with HTML rendering for lists:
-#def is_basic_list_elem(elem):
-#    """
-#    Basic list elements are those list elements that occur as children of the top-level tei:list node.
-#    We refrain from more fine-grained splitting of lists into "basic" elements for keeping it simple, since definition
-#    of basic elements (item, head, argument, ...) on deeper levels can become quite difficult when lists are heavily nested.
-#    """
-#    return bool(is_list_elem(elem) and len(elem.xpath('ancestor::tei:list', namespaces=xml_ns)) == 1)
 
 # old, much more complicated version:
 #basic_list_elem_xpath = \
@@ -152,6 +147,7 @@ def extract_text_structure(wid, node):
                 sal_node.set('citetrailPrefix', citetrail_prefix)
                 # TODO: build citetrail: citetrail_prefix + citetrail_name + position
             sal_children = flatten([extract_text_structure(wid, child) for child in node])
+            # TODO sal_title: note titles (as well as citetrails) need to be suffixed by their position / number
             for sal_child in sal_children:
                 if etree.iselement(sal_child):
                     print('Found sal_child!')
@@ -216,6 +212,102 @@ def get_citetrail_name(elem):
 # SECTION TITLES
 
 
+def get_node_title(node):
+    name = etree.QName(node).localname
+    xml_id = node.xpath('@xml:id', namespaces=xml_ns)[0]
+    if name == 'div':
+        if node.get('n') and not re.match(r'^[\d\[\]]+$', node.get('n')):
+            return '"' + node.get('n') + '"'
+        elif exists('tei:head'):
+            return make_teaser_from_element(node.xpath('tei:head[1]', namespaces=xml_ns)[0])
+        elif exists('tei:label'):
+            return make_teaser_from_element(node.xpath('tei:label[1]', namespaces=xml_ns)[0])
+        elif node.get('n') and node.get('type'):
+            return node.get('n')
+        elif exists('ancestor::tei:TEI//tei:text//tei:ref[@target = "#'+ xml_id +'"]'):
+            return make_teaser_from_element(node.xpath('ancestor::tei:TEI//tei:text//tei:ref[@target = "#'+ xml_id +'"][1]')[0])
+        elif exists('tei:list/tei:head'):
+            return make_teaser_from_element(node.xpath('tei:list/tei:head[1]', namespaces=xml_ns)[0])
+        elif exists('tei_list/tei:label'):
+            return make_teaser_from_element(node.xpath('tei:list/tei:label[1]', namespaces=xml_ns)[0])
+        else:
+            return ''
+    elif name == 'item':
+        #if exists('parent::tei:list[@type="dict"] and descendant::tei:term[1]/@key'):
+        #    return '"' + node.xpath('descendant::tei:term[1]/@key')[0] + '"'
+        #    # TODO this needs revision when we have really have such dict. lists
+        if node.get('n') and not re.match(r'^[\d\[\]]+$', node.get('n')):
+            return '"' + node.get('n') + '"'
+        elif exists('tei:head'):
+            return make_teaser_from_element(node.xpath('tei:head[1]', namespaces=xml_ns)[0])
+        elif exists('tei:label'):
+            return make_teaser_from_element(node.xpath('tei:label[1]', namespaces=xml_ns)[0])
+        elif node.get('n'):
+            return node.get('n')
+        elif exists('ancestor::tei:TEI//tei:text//tei:ref[@target = "#' + xml_id + '"]'):
+            return make_teaser_from_element(
+                node.xpath('ancestor::tei:TEI//tei:text//tei:ref[@target = "#' + xml_id + '"][1]', namespaces=xml_ns)[0])
+        else:
+            return ''
+    elif name == 'lg':
+        if exists('tei:head'):
+            return make_teaser_from_element(node.xpath('tei:head[1]', namespaces=xml_ns)[0])
+        else:
+            return make_teaser_from_element(node)
+    elif name == 'list':
+        if node.get('n') and not re.match(r'^[\d\[\]]+$', node.get('n')):
+            return '"' + node.get('n') + '"'
+        elif exists('tei:head'):
+            return make_teaser_from_element(node.xpath('tei:head[1]', namespaces=xml_ns)[0])
+        elif exists('tei:label'):
+            return make_teaser_from_element(node.xpath('tei:label[1]', namespaces=xml_ns)[0])
+        elif node.get('n'):
+            return node.get('n')
+        elif exists('ancestor::tei:TEI//tei:text//tei:ref[@target = "#'+ xml_id +'"]'):
+            return make_teaser_from_element(node.xpath('ancestor::tei:TEI//tei:text//tei:ref[@target = "#'+ xml_id +'"][1]')[0])
+        else:
+            return ''
+    elif name == 'milestone':
+        if node.get('n') and not re.match(r'^[\d\[\]]+$', node.get('n')):
+            return '"' + node.get('n') + '"'
+        elif node.get('n'):
+            return node.get('n')
+        elif exists('ancestor::tei:TEI//tei:text//tei:ref[@target = "#'+ xml_id +'"]'):
+            return make_teaser_from_element(node.xpath('ancestor::tei:TEI//tei:text//tei:ref[@target = "#'+ xml_id +'"][1]')[0])
+        else:
+            return ''
+    elif name == 'note':
+        if node.get('n'):
+            return '"' + node.get('n') + '"'
+        else:
+            return '' # TODO: in this case, the note title must be derived from the position of the note
+    elif name == 'pb':
+        if node.get('n') and re.match(r'fol\.', node.get('n')):
+            return node.get('n')
+        else:
+            return 'p. ' + node.get('n')
+        # one could also prepend a 'Vol. ' prefix here in case of a multivolume work
+    elif name == 'text':
+        if node.get('type') == 'work_volume':
+            return node.get('n')
+        else:
+            return ''
+    elif name == 'head' or name == 'label' or name == 'p' or name == 'signed' or name == 'titlePart':
+        return make_teaser_from_element(node)
+    else:
+        return ''
+
+
+# TODO HTML title
+
+
+def make_teaser_from_element(elem):
+    normalized_text = normalize_space(re.sub(r'\{.*?\}', '', re.sub(r'\[.*?\]', '', txt_dispatch(elem, 'edit'))))
+    if len(normalized_text) > config.teaser_length:
+        shortened = normalize_space(normalized_text[:config.teaser_length])
+        return '"' + shortened + '…"'
+    else:
+        return '"' + normalized_text + '"'
 
 
 # TODOS

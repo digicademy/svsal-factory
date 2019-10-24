@@ -45,10 +45,13 @@ citation_labels = {
         'note': {'full': 'nota', 'abbr': 'not.', 'isCiteRef': True}
     }
 
+teaser_length = 60
+
 
 class WorkConfig:
     def __init__(self):
         self.citation_labels = citation_labels
+        self.teaser_length = teaser_length
         self.chars = None
 
     def get_chars(self):
