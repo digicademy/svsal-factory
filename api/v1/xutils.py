@@ -33,9 +33,26 @@ def is_element(node):
     # _ProcessingInstruction is a subsubclass of _Element
 
 
-def exists(elem, xpath_expr):
+def exists(elem: etree._Element, xpath_expr):
     return elem.xpath('boolean(' + xpath_expr + ')', namespaces=xml_ns)
 
 
 def is_more_than_whitespace(string):
     return bool(re.match(r'\S', string))
+
+
+def get_xml_id(node):
+    xml_id = node.xpath('@xml:id', namespaces=xml_ns)[0]
+    if len(xml_id) == 1:
+        return xml_id
+    else:
+        return ''
+
+
+def get_list_type(node):
+    if exists(node, 'self::tei:list[@type]'):
+        return node.get('type')
+    elif exists(node, 'ancestor::tei:list[@type]'):
+        return node.xpath('ancestor::tei:list[@type][1]/@type', namespaces=xml_ns)[0]
+    else:
+        return ''

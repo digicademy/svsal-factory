@@ -47,6 +47,8 @@ citation_labels = {
 
 teaser_length = 60
 
+orig_class = 'orig'
+edit_class = 'edit'
 
 class WorkConfig:
     def __init__(self):

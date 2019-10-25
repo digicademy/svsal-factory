@@ -26,19 +26,43 @@ def transform(wid, xml_data):
         index.append(n)
     index_str = etree.tostring(index, pretty_print=True)
     print(index_str[:100])
-    # for debugging:
-    with open('tests/resources/' + wid + "_index.xml", "wb") as fo:
+    with open('tests/resources/out/' + wid + "_index.xml", "wb") as fo:
         fo.write(index_str)
 
+    # add txt, html etc., and flatten node index
+    final_index = etree.Element('sal_index')
+    for node in index.xpath('descendant::sal_node'): # TODO: does this maintain document order?
+        node_id = node.get('id')
+        #print('Processing node ' + node_id)
+        tei_node = root.xpath('//*[@xml:id = "' + node_id + '"]', namespaces=xml_ns)[0]
+        sal_node = etree.Element('sal_node')
+        sal_node.set('id', node_id)
+        # txt
+        node_edit = txt_dispatch(tei_node, 'edit')
+        node_orig = txt_dispatch(tei_node, 'orig')
+        sal_txt_orig = etree.Element('sal_txt_orig')
+        sal_txt_orig.text = node_orig
+        sal_txt_edit = etree.Element('sal_txt_edit')
+        sal_txt_edit.text = node_edit
+        sal_node.append(sal_txt_orig)
+        sal_node.append(sal_txt_edit)
+        # html
+        # TODO
+        # out
+        final_index.append(sal_node)
+
+    final_index_str = etree.tostring(final_index, pretty_print=True, encoding="UTF-8")
+    with open('tests/resources/out/' + wid + "_finalIndex.xml", "wb") as fo:
+        fo.write(final_index_str)
 
     # HTML
-    test_p = text.xpath('//*[@xml:id = "W0034-00-0003-pa-03eb"]', namespaces=xml_ns)[0]
-    transformed = html_dispatch(test_p)
-    print(etree.tostring(transformed))
+    #test_p = text.xpath('//*[@xml:id = "W0034-00-0003-pa-03eb"]', namespaces=xml_ns)[0]
+    #transformed = html_dispatch(test_p)
+    #print(etree.tostring(transformed))
 
     #TXT
-    txt_orig = re.sub(r' {2,}', ' ', txt_dispatch(test_p, 'orig'))
-    txt_edit = re.sub(r' {2,}', ' ', ''.join(txt_dispatch(test_p, 'edit')))
+    #txt_orig = re.sub(r' {2,}', ' ', txt_dispatch(test_p, 'orig'))
+    #txt_edit = re.sub(r' {2,}', ' ', ''.join(txt_dispatch(test_p, 'edit')))
 
 
 # TODO:

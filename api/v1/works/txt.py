@@ -1,7 +1,8 @@
 from lxml import etree
 import re
 from api.v1.xutils import flatten, is_element, is_text_node, exists, xml_ns
-from api.v1.works.analysis import is_basic_elem, is_marginal_elem, is_structural_elem, has_basic_ancestor
+from api.v1.works.fragmentation import is_basic_elem, is_marginal_elem, is_structural_elem, has_basic_ancestor
+
 import api.v1.works.factory as factory
 
 
@@ -11,8 +12,8 @@ import api.v1.works.factory as factory
 
 def txt_dispatch(node, mode):
     if is_element(node):
-        if globals().get('txt_' + etree.QName(node).localname):
-            return globals()['txt_' + etree.QName(node).localname](node, mode)
+        if globals().get('txt_' + etree.QName(node).localname.lower()):
+            return globals()['txt_' + etree.QName(node).localname.lower()](node, mode)
         else:
             return txt_passthru(node, mode)
     elif is_text_node(node):
@@ -39,7 +40,7 @@ def txt_passthru(node, mode):
 
 
 def txt_text_node(node):
-    return re.sub(r'\s+', ' ', str(node)) # TODO: same as HTML
+    return re.sub(r'\s+', ' ', str(node))
 
 
 
@@ -293,3 +294,9 @@ def txt_sic(node, mode):
         return
     else:
         return txt_passthru(node, mode)
+
+
+# TXT UTIL FUNCTIONS
+
+def normalize_space(text):
+    ' '.join(text.split())
