@@ -4,7 +4,7 @@ from api.v1.xutils import flatten, is_element, is_text_node, xml_ns, exists, get
 from api.v1.works.txt import *
 from api.v1.works.errors import TEIMarkupError
 from api.v1.works.config import edit_class, orig_class
-from api.v1.works.fragmentation import is_list_elem, is_main_elem, is_basic_list_elem
+from api.v1.works.fragmentation import is_list_elem, is_main_elem, is_basic_list_elem, is_page_elem
 
 # TODO: simplify the following XPaths
 # determines whether hi occurs within a section with overwriting alignment information:
@@ -93,12 +93,12 @@ def html_argument(node):
 
 
 def html_bibl(node):
-    return html_passthru_append(node, html_make_element_with_class('span', 'bibl'))
+    return html_passthru_append(node, make_element_with_class('span', 'bibl'))
     # TODO: use a human-readable form of @sortkey (if available) as @title
 
 
 def html_byline(node):
-    return html_passthru_append(node, html_make_element_with_class('span', 'tp-p byline'))
+    return html_passthru_append(node, make_element_with_class('span', 'tp-p byline'))
     # TODO css
 
 
@@ -108,9 +108,9 @@ def html_cb(node):
 
 def html_cell(node):
     if node.get('role') == 'label':
-        return html_passthru_append(node, html_make_element_with_class('td', 'table-label'))
+        return html_passthru_append(node, make_element_with_class('td', 'table-label'))
     else:
-        return html_passthru_append(node, html_make_element('td'))
+        return html_passthru_append(node, make_element('td'))
 
 
 def html_choice(node):
@@ -137,7 +137,7 @@ def html_docauthor(node):
 
 
 def html_docimprint(node):
-    span = html_make_element_with_class('span', 'tp-p docimprint')
+    span = make_element_with_class('span', 'tp-p docimprint')
     return html_passthru_append(node, span)
 
 
@@ -158,14 +158,14 @@ def html_expan(node):
 
 def html_figure(node):
     if node.get('type') == 'ornament':
-        return html_make_element_with_class('hr', 'ornament')
+        return make_element_with_class('hr', 'ornament')
 
 
 def html_foreign(node):
     cl = 'foreign'
     if node.xpath('@xml:lang', namespaces=xml_ns)[0]:
         cl += ' ' + node.xpath('@xml:lang', namespaces=xml_ns)[0]
-    return html_passthru_append(node, html_make_element_with_class('span', cl))
+    return html_passthru_append(node, make_element_with_class('span', cl))
 
 
 def html_g(node):
@@ -189,10 +189,10 @@ def html_g(node):
         # -> treat it like a choice element
         if not str(node.text) in (char.get('precomposed'), char.get('composed')) \
                 and not char_code in ('char017f', 'char0292'):
-            orig_span = html_make_element_with_class('span', orig_class + ' glyph hidden')
+            orig_span = make_element_with_class('span', orig_class + ' glyph hidden')
             orig_span.set('title', node.text)
             orig_span.text = orig_glyph
-            edit_span = html_make_element_with_class('span', edit_class + ' glyph')
+            edit_span = make_element_with_class('span', edit_class + ' glyph')
             edit_span.set('title', orig_glyph)
             edit_span.text = node.text
             return [orig_span, edit_span]
@@ -201,10 +201,10 @@ def html_g(node):
         elif char_code in ('char017f', 'char0292'):
             # long s and z shall be switchable to their standardized versions in constituted mode
             standardized_glyph = char.get('standardized')
-            orig_span = html_make_element_with_class('span', orig_class + ' glyph hidden simple')
+            orig_span = make_element_with_class('span', orig_class + ' glyph hidden simple')
             orig_span.set('title', standardized_glyph)
             orig_span.text = orig_glyph
-            edit_span = html_make_element_with_class('span', edit_class + ' glyph simple')
+            edit_span = make_element_with_class('span', edit_class + ' glyph simple')
             edit_span.set('title', orig_glyph)
             edit_span.text = standardized_glyph
             return [orig_span, edit_span]
@@ -216,19 +216,19 @@ def html_g(node):
 
 def html_gap(node):
     if exists(node, 'ancestor::tei:damage'):
-        span = html_make_element_with_class('span', 'gap')
+        span = make_element_with_class('span', 'gap')
         span.set('title', '?') # TODO
         return span
 
 
 def html_head(node):
     if is_list_elem(node):
-        return html_passthru_append(node, html_make_element_with_class('li', 'head'))
+        return html_passthru_append(node, make_element_with_class('li', 'head'))
         # TODO: to be rendered like h4, e.g., and without bullet or number
     elif is_main_elem(node):
-        return html_passthru_append(node, html_make_element_with_class('h3', 'main-head'))
+        return html_passthru_append(node, make_element_with_class('h3', 'main-head'))
     elif exists(node, 'parent::tei:lg'):
-        return html_passthru_append(node, html_make_element_with_class('h5', 'poem-head'))
+        return html_passthru_append(node, make_element_with_class('h5', 'poem-head'))
     # TODO css
     else:
         raise TEIMarkupError('Unknown context of tei:head')
@@ -268,7 +268,7 @@ def html_hi(node):
 
 
 def html_imprimatur(node):
-    return html_passthru_append(node, html_make_element_with_class('span', 'tp-p imprimatur'))
+    return html_passthru_append(node, make_element_with_class('span', 'tp-p imprimatur'))
     # TODO css
 
 
@@ -276,58 +276,28 @@ def html_item(node):
     if is_basic_list_elem(node):
         list_type = get_list_type(node)
         if list_type == 'ordered': # ordered / enumerated
-            li = html_make_element_with_class('li', 'ordered')
+            li = make_element_with_class('li', 'ordered')
             num = str(len(node.xpath('preceding-sibling::tei:item', namespaces=xml_ns)))
             li.set('value', num) # this should state the number of the item within the ordered list
             return html_passthru_append(node, li)
         elif list_type == 'simple': # no HTML list at all
-            span = html_make_element_with_class('span', 'li-inline')
+            span = make_element_with_class('span', 'li-inline')
             return [' ', html_passthru_append(node, span), ' ']
         else: # unordered/bulleted, e.g. 'index', 'summaries'
-            li = html_make_element_with_class('li', 'unordered')
+            li = make_element_with_class('li', 'unordered')
             return html_passthru_append(node, li)
     # TODO: ids for citability?
 
 
-def html_lg(node):
-    return html_passthru_append(html_make_element_with_class('div', 'poem'))
+def html_l(node):
+    return [html_passthru_append(node, make_element_with_class('span', 'poem-l')), make_element('br')]
 
 
-def html_milestone(node):
-    span = html_make_element_with_class('span', 'milestone')
-    span.set('id', get_xml_id(node))
-    if node.get('rendition') and node.get('rendition') == '#dagger':
-        sup = html_make_element('sup')
-        sup.text = '†'
-        span.append(sup)
-    elif node.get('rendition') and node.get('rendition') == '#asterisk':
-        span.text = '*'
-    return span
-
-
-def html_name(node):
-    span = html_make_element_with_class('span', 'name ' + etree.QName(node).localname)
-    if node.get('key'):
-        span.set('title', node.get('key'))
-    return html_passthru_append(node, span)
-    # TODO: make proper use of @ref here
-
-
-
-# TODO:
-#def html_note(node):
-
-
-
-# TODO: forward to this from orig, sic, abbr
-def html_orig_elem(node):
-    if exists(node, 'parent::tei:choice'):
-        edit_elem = node.xpath('parent::tei:choice/(tei:expan|tei:reg|tei:corr)', namespaces=xml_ns)[0]
-        edit_str = txt_dispatch(edit_elem, 'edit')
-        span = etree.Element('span')
-        span.set('class', 'orig ' + etree.QName(node).localname)
-        span.set('title', edit_str)
-        return html_passthru_append(node, span)
+def html_label(node):
+    if node.get('place') == 'margin':
+        return make_marginal_note(node)
+    elif node.get('place') == 'inline':
+        return html_passthru_append(node, make_element_with_class('span', 'label-inline'))
     else:
         return html_passthru(node)
 
@@ -336,19 +306,62 @@ def html_lb(node):
     return txt_lb(node, None)
 
 
+def html_lg(node):
+    return html_passthru_append(make_element_with_class('div', 'poem'))
+
+
+def html_milestone(node):
+    span = make_element_with_class('span', 'milestone')
+    span.set('id', get_xml_id(node))
+    if node.get('rendition') and node.get('rendition') == '#dagger':
+        sup = make_element('sup')
+        sup.text = '†'
+        span.append(sup)
+    elif node.get('rendition') and node.get('rendition') == '#asterisk':
+        span.text = '*'
+    return span
+
+
+def html_name(node):
+    span = make_element_with_class('span', 'name ' + etree.QName(node).localname)
+    if node.get('key'):
+        span.set('title', node.get('key'))
+    return html_passthru_append(node, span)
+    # TODO: make proper use of @ref here
+
+
+def html_note(node):
+    if node.get('place') == 'margin':
+        return make_marginal_note(node)
+    else:
+        raise TEIMarkupError('Unknown type of tei:note')
+
+
+def html_orig(node):
+    return html_orig_elem(node)
+
+
+def html_orgname(node):
+    return html_name(node)
+
+
 def html_p(node):
     elem = None
     # special contexts:
     if exists(node, 'ancestor::tei:note'):
-        elem = html_make_element_with_class('span', 'p-note')
+        elem = make_element_with_class('span', 'p-note')
     elif exists(node, 'ancestor::tei:item'):
-        elem = html_make_element_with_class('span', 'p-item')
+        elem = make_element_with_class('span', 'p-item')
     elif exists(node, 'ancestor::tei:titlePage'):
-        elem = html_make_element_with_class('span', 'p-titlepage')
+        elem = make_element_with_class('span', 'p-titlepage')
     # main text:
     else:
-        elem = html_make_element_with_class('p', 'p')
+        elem = make_element_with_class('p', 'p')
     return html_passthru_append(node, elem)
+
+
+
+# TODO:
 
 
 def html_sic(node):
@@ -361,11 +374,37 @@ def html_sic(node):
 # HTML UTIL FUNCTIONS
 
 
-def html_make_element(elem_name):
+def html_orig_elem(node):
+    if exists(node, 'parent::tei:choice'):
+        edit_elem = node.xpath('parent::tei:choice/(tei:expan|tei:reg|tei:corr)', namespaces=xml_ns)[0]
+        edit_str = txt_dispatch(edit_elem, 'edit')
+        span = etree.Element('span')
+        span.set('class', 'orig ' + etree.QName(node).localname)
+        span.set('title', edit_str)
+        return html_passthru_append(node, span)
+    else:
+        return html_passthru(node)
+
+
+def make_marginal_note(node):
+    note = make_element_with_class('div', 'marginal')
+    note.set('id', get_xml_id(node))
+    if node.get('n'):
+        label = make_element_with_class('span', 'marginal-label')
+        note.append(label)
+    if exists(node, 'tei:p'):
+        return html_passthru_append(node, note)
+    else:
+        p_note = make_element_with_class('span', 'p-note')
+        note.append(html_passthru_append(node, p_note))
+        return note
+
+
+def make_element(elem_name):
     return etree.Element(elem_name)
 
 
-def html_make_element_with_class(elem_name, class_name):
+def make_element_with_class(elem_name, class_name):
     el = etree.Element(elem_name)
     el.set('class', class_name)
     return el
