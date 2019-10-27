@@ -31,12 +31,14 @@ def transform(wid, xml_data):
 
     # add txt, html etc., and flatten node index
     final_index = etree.Element('sal_index')
+    n = 1
     for node in index.xpath('descendant::sal_node'): # TODO: does this maintain document order?
         node_id = node.get('id')
         #print('Processing node ' + node_id)
         tei_node = root.xpath('//*[@xml:id = "' + node_id + '"]', namespaces=xml_ns)[0]
         sal_node = etree.Element('sal_node')
         sal_node.set('id', node_id)
+        sal_node.set('n', str(n)) # essential field for keeping track of order and positions of elements downstream
         # txt
         node_edit = txt_dispatch(tei_node, 'edit')
         node_orig = txt_dispatch(tei_node, 'orig')
@@ -50,6 +52,7 @@ def transform(wid, xml_data):
         # TODO
         # out
         final_index.append(sal_node)
+        n += 1
 
     final_index_str = etree.tostring(final_index, pretty_print=True, encoding="UTF-8")
     with open('tests/resources/out/' + wid + "_finalIndex.xml", "wb") as fo:

@@ -2,9 +2,12 @@ from lxml import etree
 import re
 from api.v1.xutils import flatten, is_element, is_text_node, xml_ns, exists, get_list_type, get_xml_id
 from api.v1.works.txt import *
-from api.v1.works.errors import TEIMarkupError
-from api.v1.works.config import edit_class, orig_class
-from api.v1.works.fragmentation import is_list_elem, is_main_elem, is_basic_list_elem, is_page_elem
+from api.v1.works.errors import TEIMarkupError, TEIUnkownElementError
+from api.v1.works.config import edit_class, orig_class, image_server, iiif_img_default_params, tei_text_elements
+from api.v1.works.fragmentation import is_list_elem, is_main_elem, is_basic_list_elem, is_page_elem, is_anchor_elem
+from api.v1.works.analysis import get_node_title
+from base64 import b64encode
+from os import urandom
 
 # TODO: simplify the following XPaths
 # determines whether hi occurs within a section with overwriting alignment information:
@@ -27,8 +30,10 @@ def html_dispatch(node):
     if is_element(node):
         if globals().get('html_' + etree.QName(node).localname.lower()):
             return globals()['html_' + etree.QName(node).localname.lower()](node)
-        else:
+        elif etree.QName(node).localname in tei_text_elements:
             return html_passthru(node)
+        else:
+            raise TEIUnkownElementError('Unknown element: ' + etree.QName(node).localname)
     elif is_text_node(node):
         return html_text_node(node)
     # omit comments and processing instructions
@@ -48,6 +53,26 @@ def html_passthru(node):
     children = [html_dispatch(child) for child in node.xpath('node()')
                     if not (is_element(child) and ((is_basic_elem(child) or is_structural_elem(child))
                                                     or is_list_elem(child) and has_basic_ancestor(child)))]
+    children = []
+    for child in node.xpath('node()'):
+        if is_element(child):
+            # Filters:
+            # for page nodes, anchor nodes, and marginal nodes, passthru will only make *inline* placeholder elements
+            # - their "actual" HTML (page links, teasers, marginal notes) will be produced through direct calls to
+            # html_dispatch by node indexing
+            if is_page_elem(child):
+                children.append(html_pb_inline(child))
+            elif is_anchor_elem(child) or exists(node, 'self::tei:milestone'): # also include milestones that are not "anchors"
+                children.append(html_milestone_inline(child))
+            elif is_marginal_elem(child):
+                children.append(html_make_marginal_inline(child))
+            # the following shouldn't be the case, but we apply it as a safety filter in case html_dispatch
+            # has been called from above the "basic" level:
+            elif not (is_basic_elem(child) or is_structural_elem(child) \
+                        or (is_list_elem(child) and has_basic_ancestor(child))):
+                children.append(html_dispatch(child))
+        else:
+            children.append(html_dispatch(child))
     # not (is_basic_elem(child) or is_structural_elem(child)) makes sure that only teasers are processed for structural
     # elements
     return list(flatten(children))
@@ -294,10 +319,11 @@ def html_l(node):
 
 
 def html_label(node):
-    if node.get('place') == 'margin':
-        return make_marginal_note(node)
+    if is_marginal_elem(node):
+        return html_make_marginal(node)
     elif node.get('place') == 'inline':
         return html_passthru_append(node, make_element_with_class('span', 'label-inline'))
+    # TODO other types of nodes, such as dict labels
     else:
         return html_passthru(node)
 
@@ -310,7 +336,7 @@ def html_lg(node):
     return html_passthru_append(make_element_with_class('div', 'poem'))
 
 
-def html_milestone(node):
+def html_milestone_inline(node):
     span = make_element_with_class('span', 'milestone')
     span.set('id', get_xml_id(node))
     if node.get('rendition') and node.get('rendition') == '#dagger':
@@ -331,8 +357,8 @@ def html_name(node):
 
 
 def html_note(node):
-    if node.get('place') == 'margin':
-        return make_marginal_note(node)
+    if is_marginal_elem(node):
+        return html_make_marginal(node)
     else:
         raise TEIMarkupError('Unknown type of tei:note')
 
@@ -360,6 +386,92 @@ def html_p(node):
     return html_passthru_append(node, elem)
 
 
+def html_pb_inline(node):
+    if is_page_elem(node):
+        if node.get('type') == 'blank':
+            return make_element('br')
+        elif exists(node, 'preceding::tei:pb '
+                          + 'and preceding-sibling::node()[descendant-or-self::text()[not(normalize-space() = '')]] '
+                          + 'and following-sibling::node()[descendant-or-self::text()[not(normalize-space() = '')]]]'):
+            # mark page break as '|', but not at the beginning or end of structural sections
+            pb = make_element_with_class('span', 'pb')
+            pb.set('id', get_xml_id(node))
+            if node.get('break') == 'no':
+                pb.text = '|'
+            else:
+                pb.text = ' | '
+            return pb
+
+
+def html_pb(node):
+    pb_id = get_xml_id(node)
+    title = node.get('n')
+    if not re.match(r'^fol\.', title):
+        title = 'p. ' + title
+    page_link = make_element_with_class('a', 'page-link')
+    page_link.set('title', title)
+    page_link.set(facs_to_uri(node.get('facs')))
+    # TODO i18n 'View image of ' + title
+    page_link.append(make_element_with_class('i', 'fas fa-book-open'))
+    label = make_element_with_class('span', 'page-label')
+    label.text = get_node_title(node)
+    page_link.append(label)
+    return page_link
+    # TODO data-canvas / render:resolveCanvasID !
+    # TODO css
+
+
+def html_persname(node):
+    return html_name(node)
+
+
+def html_placename(node):
+    return html_name(node)
+
+
+def html_publisher(node):
+    return html_name(node)
+
+
+def html_pubplace(node):
+    return html_name(node)
+
+
+def html_quote(node):
+    # Possible approach for dealing with quote:
+    # quote may occur on any level (even above tei:div), so we indicate its start and end by means of empty anchors
+    #quote_id = str(b64encode(urandom(8))) # TODO check if this really works
+    #start = make_element_with_class('span', 'quote start-' + quote_id)
+    #end = make_element_with_class('span', 'quote end-' + quote_id)
+    #return [start, html_passthru(node), end]
+    # css: make sure that span.quote is not visible
+    return html_passthru(node)
+
+
+def html_ref(node):
+    if node.get('type') == 'note-anchor':
+        return html_passthru_append(node, make_element_with_class('sup', 'ref-note'))
+        # TODO: get reference to note, e.g. for highlighting
+    elif node.get('target'):
+        pass
+        # TODO makeCitetrailUri
+
+
+
+
+def html_row(node):
+    return html_passthru_append(node, make_element('tr'))
+
+
+def html_signed(node):
+    return html_passthru_append(node, make_element_with_class('p', 'signed'))
+
+
+def html_space(node):
+    return txt_space(node, None)
+
+
+
 
 # TODO:
 
@@ -374,19 +486,50 @@ def html_sic(node):
 # HTML UTIL FUNCTIONS
 
 
+def make_uri_from_target(node, targets):
+    target = targets.split()[0] # if there are several, first one wins
+
+    work_scheme = r'(work:(W[A-z0-9.:_\-]+))?#(.*)'
+    facs_scheme = r'facs:((W[0-9]+)[A-z0-9.:#_\-]+)'
+    generic_scheme = r'(\S+):([A-z0-9.:#_\-]+)'
+    if target.startswith('#'):
+        # target is some node in the current work
+        targeted = node.xpath('ancestor::tei:TEI//tei:text//*[@xml:id = ' + target + ']', namespaces=xml_ns)
+        if len(targeted) == 1:
+            pass # TODO makeCitetrailUri
+
+
+
+def facs_to_uri(pb_facs):
+    facs = pb_facs.split()[0]
+    single_vol_regex = r'facs:(W[0-9]{4})\-([0-9]{4})'
+    multi_vol_regex = r'facs:(W[0-9]{4})\-([A-z])\-([0-9]{4})'
+    if re.match(single_vol_regex, facs): # single-volume work, e.g. "facs:W0017-0005"
+        work_id = re.sub(single_vol_regex, '$1', facs)
+        facs_id = re.sub(single_vol_regex, '$2', facs)
+        return image_server + '/iiif/image/' + work_id + '!' + work_id + '-' + facs_id + iiif_img_default_params
+    elif re.match(multi_vol_regex, facs):
+        work_id = re.sub(multi_vol_regex, '$1', facs)
+        vol_id = re.sub(multi_vol_regex, '$2', facs)
+        facs_id = re.sub(multi_vol_regex, '$3', facs)
+        return image_server + '/iiif/image/' + work_id + '!' + vol_id + '!' + \
+               work_id + '-' + vol_id + '-' + facs_id + iiif_img_default_params
+    else:
+        raise TEIMarkupError('Illegal @facs value: ' + facs + ' (' + pb_facs + ')')
+
+
 def html_orig_elem(node):
     if exists(node, 'parent::tei:choice'):
         edit_elem = node.xpath('parent::tei:choice/(tei:expan|tei:reg|tei:corr)', namespaces=xml_ns)[0]
         edit_str = txt_dispatch(edit_elem, 'edit')
-        span = etree.Element('span')
-        span.set('class', 'orig ' + etree.QName(node).localname)
+        span = make_element_with_class('span', orig_class + ' ' + etree.QName(node).localname)
         span.set('title', edit_str)
         return html_passthru_append(node, span)
     else:
         return html_passthru(node)
 
 
-def make_marginal_note(node):
+def html_make_marginal(node):
     note = make_element_with_class('div', 'marginal')
     note.set('id', get_xml_id(node))
     if node.get('n'):
@@ -398,6 +541,13 @@ def make_marginal_note(node):
         p_note = make_element_with_class('span', 'p-note')
         note.append(html_passthru_append(node, p_note))
         return note
+
+
+def html_make_marginal_inline(node):
+    # make an empty anchor for referencing purposes
+    inline_marg = make_element_with_class('span', 'marginal')
+    inline_marg.set('id', get_xml_id(node))
+    return inline_marg
 
 
 def make_element(elem_name):

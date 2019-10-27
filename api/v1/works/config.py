@@ -2,6 +2,18 @@ from lxml import etree
 from api.v1.xutils import xml_ns
 
 
+image_server = 'https://facs.salamanca.school' # TODO
+iiif_img_default_params = '/full/full/0/default.jpg' # TODO
+
+tei_text_elements = ('g', 'lb', 'pb', 'cb', 'head', 'p', 'note', 'div', 'milestone', 'choice', 'abbr', 'orig', 'sic',
+                      'expan', 'reg', 'corr', 'persName', 'placeName', 'docAuthor', 'orgName', 'pubPlace', 'publisher',
+                      'title', 'term', 'bibl', 'hi', 'emph', 'ref', 'quote', 'soCalled', 'list', 'item', 'gloss', 'eg',
+                      'birth', 'death', 'lg', 'l', 'signed', 'titlePage', 'titlePart', 'docTitle', 'docDate', 'byline',
+                      'imprimatur', 'docImprint', 'label', 'argument', 'damage', 'gap', 'supplied', 'unclear', 'del',
+                      'space', 'figure', 'text', 'front', 'body', 'back', 'table', 'row', 'cell', 'foreign', 'date',
+                      'cit', 'author', 'docEdition', 'TEI', 'group', 'figDesc', 'teiHeader', 'fw')
+
+
 citation_labels = {
         # div/@label and milestone/@unit
         'additional': {'full': 'addendum', 'abbr': 'add.', 'isCiteRef': True},

@@ -2,6 +2,8 @@ from lxml import etree
 import re
 from api.v1.xutils import flatten, is_element, is_text_node, exists, xml_ns
 from api.v1.works.fragmentation import is_basic_elem, is_marginal_elem, is_structural_elem, has_basic_ancestor
+from api.v1.works.errors import TEIUnkownElementError
+from api.v1.works.config import tei_text_elements
 
 import api.v1.works.factory as factory
 
@@ -14,8 +16,10 @@ def txt_dispatch(node, mode):
     if is_element(node):
         if globals().get('txt_' + etree.QName(node).localname.lower()):
             return globals()['txt_' + etree.QName(node).localname.lower()](node, mode)
-        else:
+        elif etree.QName(node).localname in tei_text_elements:
             return txt_passthru(node, mode)
+        else:
+            raise TEIUnkownElementError('Unknown element: ' + etree.QName(node).localname)
     elif is_text_node(node):
         return txt_text_node(node)
     # omit comments and processing instructions
