@@ -303,4 +303,4 @@ def txt_sic(node, mode):
 # TXT UTIL FUNCTIONS
 
 def normalize_space(text):
-    ' '.join(text.split())
+    return ' '.join(text.split())

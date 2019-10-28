@@ -56,3 +56,7 @@ def get_list_type(node):
         return node.xpath('ancestor::tei:list[@type][1]/@type', namespaces=xml_ns)[0]
     else:
         return ''
+
+def copy_attributes(from_elem, to_elem):
+    for name, value in from_elem.items():
+        to_elem.set(name, value)

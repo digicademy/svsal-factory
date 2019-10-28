@@ -1,4 +1,4 @@
-from api.v1.works.analysis import extract_text_structure
+from api.v1.works.analysis import extract_text_structure, enrich_index
 from api.v1.works.html import html_dispatch
 from api.v1.works.txt import txt_dispatch
 from api.v1.xutils import xml_ns, flatten
@@ -26,13 +26,17 @@ def transform(wid, xml_data):
     index0 = etree.Element('sal_index')
     for n in index_nodes0:
         index0.append(n)
-    index_str = etree.tostring(index0, pretty_print=True)
+    index0_str = etree.tostring(index0, pretty_print=True)
     with open('tests/resources/out/' + wid + "_index0.xml", "wb") as fo:
-        fo.write(index_str)
+        fo.write(index0_str)
     # b) make full citetrails
+    enriched_index = enrich_index(index0)
+    index_str = etree.tostring(enriched_index, pretty_print=True)
+    with open('tests/resources/out/' + wid + "_index.xml", "wb") as fo:
+        fo.write(index_str)
     # TODO
 
-"""
+""" 
     # add txt, html etc., and flatten node index
     final_index = etree.Element('sal_index')
     n = 1
@@ -55,7 +59,7 @@ def transform(wid, xml_data):
         # html
         # TODO
         # out
-        final_index.append(sal_node)
+        final_index.append(sal_node) 
         n += 1
 
     final_index_str = etree.tostring(final_index, pretty_print=True, encoding="UTF-8")

@@ -62,11 +62,13 @@ teaser_length = 60
 orig_class = 'orig'
 edit_class = 'edit'
 
+
 class WorkConfig:
     def __init__(self):
         self.citation_labels = citation_labels
         self.teaser_length = teaser_length
         self.chars = None
+        self.node_mappings = {}
 
     def get_chars(self):
         return self.chars
@@ -80,6 +82,12 @@ class WorkConfig:
                 mappings[mapping.get('type')] = mapping.text
             chars[id] = mappings
         self.chars = chars
+
+    def get_node_mappings(self):
+        return self.node_mappings
+
+    def put_node_mapping(self, xml_id, citetrail):
+        self.node_mappings[xml_id] = citetrail
 
     def get_citation_labels(self):
         return self.citation_labels
