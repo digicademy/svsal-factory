@@ -19,20 +19,24 @@ def transform(wid, xml_data):
 
     text = root.xpath('child::tei:text', namespaces=xml_ns)[0]
 
-    # INDEXING
-    index_nodes = flatten(extract_text_structure(wid, text))
-    index = etree.Element('sal_index')
-    for n in index_nodes:
-        index.append(n)
-    index_str = etree.tostring(index, pretty_print=True)
-    print(index_str[:100])
-    with open('tests/resources/out/' + wid + "_index.xml", "wb") as fo:
+    # 1. INDEXING
+    # a) extract the basic structure of the text (i.e., the hierarchy of all relevant nodes), also building
+    # preliminary citetrails
+    index_nodes0 = flatten(extract_text_structure(wid, text))
+    index0 = etree.Element('sal_index')
+    for n in index_nodes0:
+        index0.append(n)
+    index_str = etree.tostring(index0, pretty_print=True)
+    with open('tests/resources/out/' + wid + "_index0.xml", "wb") as fo:
         fo.write(index_str)
+    # b) make full citetrails
+    # TODO
 
+"""
     # add txt, html etc., and flatten node index
     final_index = etree.Element('sal_index')
     n = 1
-    for node in index.xpath('descendant::sal_node'): # TODO: does this maintain document order?
+    for node in index0.xpath('descendant::sal_node'): # TODO: does this maintain document order?
         node_id = node.get('id')
         #print('Processing node ' + node_id)
         tei_node = root.xpath('//*[@xml:id = "' + node_id + '"]', namespaces=xml_ns)[0]
@@ -57,7 +61,7 @@ def transform(wid, xml_data):
     final_index_str = etree.tostring(final_index, pretty_print=True, encoding="UTF-8")
     with open('tests/resources/out/' + wid + "_finalIndex.xml", "wb") as fo:
         fo.write(final_index_str)
-
+"""
     # HTML
     #test_p = text.xpath('//*[@xml:id = "W0034-00-0003-pa-03eb"]', namespaces=xml_ns)[0]
     #transformed = html_dispatch(test_p)

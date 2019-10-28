@@ -42,9 +42,9 @@ def is_more_than_whitespace(string):
 
 
 def get_xml_id(node):
-    xml_id = node.xpath('@xml:id', namespaces=xml_ns)[0]
+    xml_id = node.xpath('@xml:id', namespaces=xml_ns)
     if len(xml_id) == 1:
-        return xml_id
+        return xml_id[0]
     else:
         return ''
 

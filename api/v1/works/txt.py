@@ -1,6 +1,6 @@
 from lxml import etree
 import re
-from api.v1.xutils import flatten, is_element, is_text_node, exists, xml_ns
+from api.v1.xutils import flatten, is_element, is_text_node, exists, xml_ns, get_xml_id
 from api.v1.works.fragmentation import is_basic_elem, is_marginal_elem, is_structural_elem, has_basic_ancestor
 from api.v1.works.errors import TEIUnkownElementError
 from api.v1.works.config import tei_text_elements
@@ -31,7 +31,7 @@ def txt_passthru(node, mode):
         for child in node.xpath('node()'):
             if is_element(child):
                 if is_basic_elem(child) and is_marginal_elem(child):
-                    id = child.xpath('@xml:id', namespaces=xml_ns)[0]
+                    id = get_xml_id(child)
                     children.append('{%note:' + id + '%}')
                     # placeholder for marginal note in main text: those must be reinserted later if necessary
                     # TODO: use citetrail rather than xml:id? make sure that placeholders are excluded from searching/indexing

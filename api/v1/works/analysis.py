@@ -1,8 +1,9 @@
 from lxml import etree
-from api.v1.xutils import flatten, xml_ns, is_element, exists
+from api.v1.xutils import flatten, xml_ns, is_element, exists, get_xml_id
 from api.v1.works.txt import txt_dispatch, normalize_space
-from api.v1.works.factory import config
+from api.v1.works.config import teaser_length as config_teaser_length
 from api.v1.works.fragmentation import *
+from api.v1.works.errors import NodeIndexingError
 import re
 
 
@@ -11,87 +12,152 @@ import re
 
 def extract_text_structure(wid, node):
     if is_element(node):
-        elem_type = get_elem_type(node)
-        if len(node.xpath('./@xml:id')) and elem_type:
-            print('Processing ' + elem_type + ' element: ' + node.tag + ' (' + node.xpath('./@xml:id')[0] + ')')
+        node_type = get_elem_type(node)
+        if get_xml_id(node) and node_type:
             sal_node = etree.Element('sal_node')
-            sal_node.set('id', node.xpath('./@xml:id')[0])
+
+            # Basic information
+            sal_node.set('id', get_xml_id(node))
             sal_node.set('name', etree.QName(node).localname)
-            sal_node.set('type', elem_type)
-            citetrail_prefix = get_citetrail_prefix(node)
+            sal_node.set('type', node_type)
             is_basic = is_basic_elem(node)
             if is_basic:
                 sal_node.set('basic', 'true')
-            if citetrail_prefix:
-                sal_node.set('citetrailPrefix', citetrail_prefix)
-                # TODO: build citetrail: citetrail_prefix + citetrail_name + position
-            # list nodes require some more information about their fragmentation depth
-            if is_basic and elem_type == 'list':
-                sal_node.set('listLevel', str(len(node.xpath('ancestor::tei:list', namespaces=xml_ns))))
-                sal_node.set('listParent', node.xpath('ancestor::tei:list[1]/@xml:id', namespaces=xml_ns)[0])
+
+            # Citable parent (still as xml:id, not citetrail)
+            # TODO are citableParents still relevant? if so, should we rather get parents in the next run?
+            parent_id = get_citable_parents_xml_id(node, node_type)
+            if parent_id:
+                sal_node.set('citableParent', parent_id)
+            else:
+                print('Could not find citable parent: ' + get_xml_id(node))
+
+            # Citetrails (still in preliminary form and not concatenated with node's parents' citetrail parts)
+            preliminary_citetrail = normalize_space(get_citetrail_prefix(node, node_type)
+                                                    + get_citetrail_infix(node, node_type))
+            if preliminary_citetrail:
+                sal_node.set('citetrail', preliminary_citetrail)
+
+            # Preliminary passagetrails
+            # TODO
+
+            # List nodes (require some more information about their contexts)
+            # TODO check if this works
+            if is_basic and node_type == 'list':
+                level = len(node.xpath('ancestor::tei:list', namespaces=xml_ns))
+                sal_node.set('listLevel', str(level))
+                if level > 0:
+                    sal_node.set('listParent', node.xpath('ancestor::tei:list[1]/@xml:id', namespaces=xml_ns)[0])
                 # TODO: use citetrail rather than xml:id of listParent
                 # TODO: some information about the kind of list (get_list_type)? in items or list?
-            sal_children = flatten([extract_text_structure(wid, child) for child in node])
+
+            # Child nodes
+            children = list(flatten([extract_text_structure(wid, child) for child in node]))
             # TODO sal_title: note titles (as well as citetrails) need to be suffixed by their position / number
-            for sal_child in sal_children:
-                if etree.iselement(sal_child):
-                    print('Found sal_child!')
-                    sal_node.append(sal_child)
-                elif isinstance(sal_child, list):
-                        print('Found list: ' + '; '.join(sal_child))
+            if len(children) > 0:
+                sal_children = etree.Element('children')
+                for sal_child in children:
+                    if etree.iselement(sal_child):
+                        sal_children.append(sal_child)
+                    elif isinstance(sal_child, list):
+                        raise NodeIndexingError('Found list: ' + '; '.join(sal_child) + ' instead of child::sal_node')
+                sal_node.append(sal_children)
             return sal_node
         else:
             return [extract_text_structure(wid, child) for child in node]
     else:
         pass
 
-# TODO: notes within lists?
+
+def get_citable_parents_xml_id(node: etree._Element, node_type: str):
+    """
+    Gets the citetrail (not passagetrail!) parent of the node.
+    """
+    ancestors = node.xpath('ancestor::*')
+    if node_type == 'marginal' or node_type == 'anchor':
+        # marginals and anchors must not have p (or some other "main" node) as their citableParent
+        for anc in ancestors:
+            if is_structural_elem(anc):
+                return get_xml_id(anc)
+    elif node_type == 'page':
+        # within front, back, and single volumes, citable parent resolves to one of those elements for avoiding
+        # collisions with identically named pb in other parts
+        for anc in ancestors:
+            if exists(anc, 'self::tei:front or self::tei:back or self::tei:text[1][not(@xml:id = "completeWork" or @type = "work_part")]'):
+                return get_xml_id(anc)
+        # note: this makes pb for which "else" is true appear outside of any structural hierarchy
+    else:
+        for anc in ancestors:
+            if get_elem_type(anc):
+                return get_xml_id(anc)
+
+
+
+#def construct_citetrails(sal_index):
+
+
+
 
 
 # CITETRAILS
 
 
-def get_citetrail_prefix(elem):
+def get_citetrail_prefix(node: etree._Element, node_type: str):
     """
-    Note: this function assumes that get_element_type(elem) == True
+    Citetrails for certain node types are always prefixed with a 'categorical' keyword/string.
     """
-    if is_page_elem(elem):
-        return 'p'
-    elif is_marginal_elem(elem):
-        return 'n'
-    elif is_anchor_elem(elem) and exists(elem, 'self::tei:milestone[@unit]'):
-        return elem.get('unit')
-    elif is_structural_elem(elem) and exists(elem, 'self::tei:text[@type = "work_volume"]'):
-        return 'vol'
-    elif is_main_elem(elem):
-        if exists(elem, 'self::tei:head'):
-            return 'heading'
-        elif exists(elem, 'self::tei:titlePage'):
-            return 'titlepage'
-        else:
-            return ''
-    elif is_list_elem(elem):
-        if exists(elem, 'self::tei:list[@type = "dict" or @type = "index"]'):
-            return elem.get('type')
-        elif exists(elem, 'self::tei:item[ancestor::tei:list[@type = "dict"]]'):
-            return 'entry'
-        else:
-            return ''
-    else:
-        return ''
+    prefix = ''
+    name = etree.QName(node).localname
+    if node_type == 'page':
+        prefix = 'p'
+    elif node_type == 'marginal':
+        prefix = 'n'
+    elif node_type == 'anchor' and exists(node, 'self::tei:milestone[@unit]'):
+        prefix = node.get('unit')
+    elif node_type == 'structural':
+        if name == 'front':
+            prefix = 'frontmatter'
+        elif name == 'back':
+            prefix = 'backmatter'
+        elif exists(node, 'self::tei:text[@type = "work_volume"]'):
+            prefix = 'vol'
+    elif node_type == 'main':
+        if exists(node, 'self::tei:head'):
+            prefix = 'heading'
+        elif exists(node, 'self::tei:titlePage'):
+            prefix = 'titlepage'
+    elif node_type == 'list':
+        if exists(node, 'self::tei:list[@type = "dict" or @type = "index"]'):
+            prefix = node.get('type')
+        elif exists(node, 'self::tei:item[ancestor::tei:list[@type = "dict"]]'):
+            prefix = 'entry'
+    return prefix
 
 
-def get_citetrail_name(elem):
+def get_citetrail_infix(node:etree._Element, node_type:str):
     """
-    Note: this function assumes that get_element_type(elem) == True
+    Certain nodes contain an infix in their citetrail: a "name" that is derived from node-specific
+    properties such as attributes. Such an infix is usually (but not necessarily) individual for the respective node.
     """
-    name = etree.QName(elem).localname
-    if name == 'front':
-        return 'frontmatter'
-    elif name == 'back':
-        return 'backmatter'
+    infix = ''
+    name = etree.QName(node).localname
+    if node_type == 'marginal':
+        if node.get('n'):
+            infix = re.sub(r'([^a-zA-Z0-9]|[\[\]])', '', node.get('n')).upper()
+    elif node_type == 'page':
+        if node.get('n'):
+            infix = re.sub(r'([^a-zA-Z0-9]|[\[\]])', '', node.get('n')).upper()
+        else:
+            infix = node.get('facs')[5:]
     elif name == 'item':
-        pass # TODO
+        # if the item contains a term, we use that for giving the item a "speaking" name
+        terms = node.xpath('descendant::tei:term[@key]', namespaces=xml_ns)
+        if terms:
+            term = terms[0]
+            if len(term.xpath('ancestor::tei:list', namespaces=xml_ns)) \
+                    == len(node.xpath('ancestor::tei:list', namespaces=xml_ns)):
+                infix = re.sub(r'[^a-zA-Z0-9]', '', term.get('key')).upper()
+    return infix
 
 
 
@@ -189,8 +255,8 @@ def get_node_title(node):
 
 def make_teaser_from_element(elem):
     normalized_text = normalize_space(re.sub(r'\{.*?\}', '', re.sub(r'\[.*?\]', '', txt_dispatch(elem, 'edit'))))
-    if len(normalized_text) > config.teaser_length:
-        shortened = normalize_space(normalized_text[:config.teaser_length])
+    if len(normalized_text) > config_teaser_length:
+        shortened = normalize_space(normalized_text[:config_teaser_length])
         return '"' + shortened + '…"'
     else:
         return '"' + normalized_text + '"'
@@ -210,3 +276,6 @@ def make_teaser_from_element(elem):
     # TODO
     def extract_metadata(wid, tei_header):
         pass
+
+    # General:
+    # TODO: notes within lists?

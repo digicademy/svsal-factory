@@ -5,3 +5,7 @@ class TEIMarkupError(Exception):
 
 class TEIUnkownElementError(Exception):
     pass
+
+class NodeIndexingError(Exception):
+    """Base class for exceptions that occur during node indexing"""
+    pass
