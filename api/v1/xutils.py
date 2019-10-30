@@ -33,7 +33,7 @@ def is_element(node):
     # _ProcessingInstruction is a subsubclass of _Element
 
 
-def exists(elem: etree._Element, xpath_expr):
+def exists(elem: etree._Element, xpath_expr: str):
     return elem.xpath('boolean(' + xpath_expr + ')', namespaces=xml_ns)
 
 

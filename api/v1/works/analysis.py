@@ -2,8 +2,9 @@ from lxml import etree
 from api.v1.xutils import flatten, xml_ns, is_element, exists, get_xml_id, copy_attributes
 from api.v1.works.txt import txt_dispatch, normalize_space
 from api.v1.works.config import teaser_length as config_teaser_length
+from api.v1.works.config import citation_labels
 from api.v1.works.fragmentation import *
-from api.v1.works.errors import NodeIndexingError
+from api.v1.works.errors import NodeIndexingError, TEIMarkupError
 import re
 
 
@@ -16,7 +17,7 @@ def extract_text_structure(wid, node):
         if get_xml_id(node) and node_type:
             sal_node = etree.Element('sal_node')
 
-            # Basic information
+            # BASIC INFO
             sal_node.set('id', get_xml_id(node))
             sal_node.set('name', etree.QName(node).localname)
             sal_node.set('type', node_type)
@@ -24,23 +25,30 @@ def extract_text_structure(wid, node):
             if is_basic:
                 sal_node.set('basic', 'true')
 
-            # Citable parent (still as xml:id, not citetrail)
-            # TODO are citableParents still relevant? if so, should we rather get parents in the next run?
-            parent_id = get_citable_parents_xml_id(node, node_type)
-            if parent_id:
-                sal_node.set('citableParent', parent_id)
-            #else:
-            #    print('Could not find citable parent: ' + get_xml_id(node))
+            # CITETRAIL (preliminary and yet not concatenated with node parent's citetrail)
+            preliminary_cite = normalize_space(get_citetrail_prefix(node, node_type) + get_citetrail_infix(node, node_type))
+            if preliminary_cite:
+                sal_node.set('cite', preliminary_cite)
+            citetrail_ancestors = get_citable_ancestors(node, node_type, 'citetrail')
+            citetrail_parent_id = None
+            if citetrail_ancestors:
+                citetrail_parent_id = get_xml_id(citetrail_ancestors[0])
+            if citetrail_parent_id:
+                sal_node.set('citetrailParent', citetrail_parent_id)
 
-            # Citetrails (still in preliminary form and not concatenated with node's parents' citetrail parts)
-            preliminary_citetrail = normalize_space(get_citetrail_prefix(node, node_type) + get_citetrail_infix(node, node_type))
-            if preliminary_citetrail:
-                sal_node.set('citetrail', preliminary_citetrail)
+            # PASSAGETRAIL (preliminary and not yet concatenated with parent's passagetrail)
+            preliminary_passage = get_passagetrail(node, node_type)
+            if is_passagetrail_node(node):
+                sal_node.set('passage', preliminary_passage)
+            passagetrail_ancestors = get_citable_ancestors(node, node_type, 'passagetrail')
+            passagetrail_parent_id = None
+            if passagetrail_ancestors:
+                passagetrail_parent_id = get_xml_id(passagetrail_ancestors[0])
+            if passagetrail_parent_id:
+                sal_node.set('passagetrailParent', passagetrail_parent_id)
+            sal_node.set('passagetrailAncestorsN', str(len(passagetrail_ancestors)))
 
-            # Preliminary passagetrails
-            # TODO
-
-            # List nodes (require some more information about their contexts)
+            # LIST (list nodes require some more information about their contexts)
             # TODO check if this works
             if is_basic and node_type == 'list':
                 level = len(node.xpath('ancestor::tei:list', namespaces=xml_ns))
@@ -50,7 +58,13 @@ def extract_text_structure(wid, node):
                 # TODO: use citetrail rather than xml:id of listParent
                 # TODO: some information about the kind of list (get_list_type)? in items or list?
 
-            # Child nodes
+            # REMOVE:
+            # DIV (add @type as @divType)
+            #name = etree.QName(node).localname
+            #if name == 'div':
+            #    sal_node.set('divType', node.get('type'))
+
+            # CHILD NODES
             children = list(flatten([extract_text_structure(wid, child) for child in node]))
             # TODO sal_title: note titles (as well as citetrails) need to be suffixed by their position / number
             if len(children) > 0:
@@ -68,10 +82,6 @@ def extract_text_structure(wid, node):
         pass
 
 
-
-
-
-# TODO verify that this really works
 def enrich_index(sal_index):
     from api.v1.works.factory import config
     enriched_index = etree.Element('sal_index')
@@ -80,45 +90,80 @@ def enrich_index(sal_index):
         copy_attributes(node, enriched_node)
 
         # CITETRAILS
-        # determine citetrail position based on preceding-sibling::sal_node with similar citetrails
-        this_citetrail = node.get('citetrail')
-        revised_citetrail = this_citetrail
-        if this_citetrail:
-            similar_preceding = len(node.xpath('preceding-sibling::sal_node[@citetrail = "' + this_citetrail + '"]'))
-            similar_following = len(node.xpath('following-sibling::sal_node[@citetrail = "' + this_citetrail + '"]'))
+        # determine citetrail position based on preceding-sibling::sal_node with similar @cite
+        this_cite = node.get('cite')
+        revised_cite = this_cite
+        if this_cite:
+            similar_preceding = len(node.xpath('preceding-sibling::sal_node[@cite = "' + this_cite + '"]'))
+            similar_following = len(node.xpath('following-sibling::sal_node[@cite = "' + this_cite + '"]'))
             if similar_preceding > 0 or similar_following > 0:
-                if re.match(r'\d$', this_citetrail):
-                    # if citetrail stem ends with number, use '-' as separator (e.g., for preserving page numbers)
-                    revised_citetrail += '-' + str(similar_preceding + 1)
+                if re.match(r'\d$', this_cite):
+                    # if cite ends with number, use '-' as separator (e.g., for preserving page numbers)
+                    revised_cite += '-' + str(similar_preceding + 1)
                 else:
-                    revised_citetrail += str(similar_preceding + 1)
+                    revised_cite += str(similar_preceding + 1)
         else:
-            # if node has no citetrail stem, simply count similarly unnamed preceding siblings
-            revised_citetrail = str(len(node.xpath('preceding-sibling::sal_node[not(@citetrail)]')) + 1)
+            # if node has no @cite[./string()], simply count similarly unnamed preceding siblings
+            revised_cite = str(len(node.xpath('preceding-sibling::sal_node[not(@cite)]')) + 1)
         # construct full citetrail and put them into node and config.node_mappings
-        if node.get('citableParent'):
-            parent_citetrail = config.get_node_mappings()[node.get('citableParent')]
-            # this assumes that full citetrail has already been written to parent
-            full_citetrail = parent_citetrail + '.' + revised_citetrail
+        if node.get('citetrailParent'):
+            print('node id is ' + node.get('id'))
+            print('parent_citetrail is ' + node.get('citetrailParent'))
+            #print(config.get_node_mappings())
+            # since iter() is depth-first, we can assume that the parent's full citetrail has already been registered
+            parent_citetrail = config.get_citetrail_mapping(node.get('citetrailParent'))
+            full_citetrail = parent_citetrail + '.' + revised_cite
             enriched_node.set('citetrail', full_citetrail)
-            config.put_node_mapping(node.get('id'), full_citetrail)
+            config.put_citetrail_mapping(node.get('id'), full_citetrail)
         else:
-            enriched_node.set('citetrail', revised_citetrail)
-            config.put_node_mapping(node.get('id'), revised_citetrail)
+            enriched_node.set('citetrail', revised_cite)
+            config.put_citetrail_mapping(node.get('id'), revised_cite)
 
+        # PASSAGETRAILS
+        this_passage = node.get('passagetrail')
+        revised_passage = this_passage
+        if this_passage:
+            # for div, milestones, and notes: determine passagetrail position based on preceding::sal_node with similar
+            # passagetrails within *the same passagetrail section* (structure is more complicated than with citetrails,
+            # since parent::sal_node is not necessarily a passagetrail "parent")
+            position = ''
+            if node.get('name') in ('div', 'milestone') or node.get('type') == 'note':
+                passagetrail_parent = None
+                if node.get('passagetrailParent'):
+                    passagetrail_parent = node.xpath('ancestor::*[@id = "' + node.get('passagetrailParent') + '"]')[0]
+                else:
+                    # if there is no passagetrail parent, take the sal_index root:
+                    passagetrail_parent = node.xpath('ancestor::sal_index')
+                passagetrail_ancestors_n = node.get('passagetrailAncestorsN')
+                similar = passagetrail_parent.xpath('descendant::sal_node[@name = "' + node.get('name') + '"'
+                                                              + ' and @passage = "' + this_passage + '"'
+                                                              + ' and @passagetrailAncestorsN = '
+                                                              + passagetrail_ancestors_n
+                                                              + ']')
+                if len(similar) > 0:
+                    similar_preceding = []
+                    for s in similar:
+                        if exists('following::sal_node[@id = "' + node.get('id') + '"]'):
+                            similar_preceding.append(s)
+                    position = str(len(similar_preceding) + 1)
+                    revised_passage += ' [' + position + ']'
+                    # using square brackets to indicate automatic numbering/"normalization"
+        if node.get('passagetrailParent'):
+            parent_passagetrail = config.get_passagetrail_mapping(node.get('passagetrailParent'))
+            print(config.get_node_mappings())
+            if revised_passage:
+                full_passagetrail = parent_passagetrail + ' ' + revised_passage
+                enriched_node.set('passagetrail', full_passagetrail)
+                config.put_passagetrail_mapping(node.get('id'), full_passagetrail)
+            else:
+                enriched_node.set('passagetrail', parent_passagetrail)
+                config.put_passagetrail_mapping(node.get('id'), parent_passagetrail)
+        # if neither passage nor passagetrailParent exists, we refrain from setting any attributes/mappings
 
+        # FINALIZATION
         enriched_index.append(enriched_node)
         # make full-blown citetrails
     return enriched_index
-
-
-def get_ancestor_citetrails(node):
-    citable_parent_id = node.get('citableParent')
-    citable_parent_node = node.xpath('ancestor::sal_node[@id = "' + citable_parent_id + '"]')
-    citetrails = []
-    #if citable_parent_id and len(citable_parent_node) > 0:
-    #    citetrails = construct_citetrail(citable_parent_node[0])
-    #return path
 
 
 # CITETRAIL UTIL FUNCTIONS
@@ -182,30 +227,137 @@ def get_citetrail_infix(node:etree._Element, node_type:str):
     return infix
 
 
-def get_citable_parents_xml_id(node: etree._Element, node_type: str):
+def get_citable_ancestors(node: etree._Element, node_type: str, mode: str):
     """
-    Gets the citetrail (not passagetrail!) parent of the node.
+    Gets all citetrail or passagetrail ancestors of a node (switch modes: 'citetrail' vs 'passagetrail').
     """
-    ancestors = node.xpath('ancestor::*')
+    tei_ancestors = node.xpath('ancestor::*')
+    ancestors = []
     if node_type == 'marginal' or node_type == 'anchor':
-        # marginals and anchors must not have p (or some other "main" node) as their citableParent
-        for anc in ancestors:
-            if is_structural_elem(anc):
-                return get_xml_id(anc)
+        # marginals and anchors must not have p (or some other "main" node) as their parent
+        for anc in tei_ancestors:
+            if (mode == 'citetrail' or (mode == 'passagetrail' and is_passagetrail_node(anc))) \
+                    and is_structural_elem(anc):
+                ancestors.append(anc)
     elif node_type == 'page':
         # within front, back, and single volumes, citable parent resolves to one of those elements for avoiding
         # collisions with identically named pb in other parts
-        for anc in ancestors:
-            if exists(anc, 'self::tei:front or self::tei:back or self::tei:text[1][not(@xml:id = "completeWork" or @type = "work_part")]'):
-                return get_xml_id(anc)
-        # note: this makes pb for which "else" is true appear outside of any structural hierarchy
+        for anc in tei_ancestors:
+            if (mode == 'citetrail' or (mode == 'passagetrail' and is_passagetrail_node(anc))) \
+                    and exists(anc, 'self::tei:front or self::tei:back'
+                                    + ' or self::tei:text[1][not(@xml:id = "completeWork" or @type = "work_part")]'):
+                ancestors.append(anc)
+        # note: this makes all other pb appear outside of any structural hierarchy, but this should be fine
     else:
-        for anc in ancestors:
-            if get_elem_type(anc):
-                return get_xml_id(anc)
+        for anc in tei_ancestors:
+            if (mode == 'citetrail' or (mode == 'passagetrail' and is_passagetrail_node(anc))) and get_elem_type(anc):
+                ancestors.append(anc)
+    return ancestors
 
 
-# NODE TITLES
+# PASSAGETRAIL UTIL FUNCTIONS
+
+
+# gets a preliminary citetrail *part* (if any) for a specific node, not the whole citetrail
+def get_passagetrail(node: etree._Element, node_type: str):
+    passagetrail = ''
+    if is_passagetrail_node(node):
+        name = etree.QName(node).localname
+        if name in ('back', 'front', 'titlePage'):
+            passagetrail = citation_labels[name]['abbr']
+        elif name == 'milestone':
+            passagetrail = citation_labels[node.get('unit')]['abbr']
+            if node.get('n') and re.match(r'^\[?\d+\]?$', node.get('n')):
+                passagetrail += ' ' + node.get('n')
+        elif name == 'div':
+            div_type = node.get('type')
+            passagetrail = citation_labels[div_type]['abbr']
+            if div_type in ('lecture', 'gloss'):
+                # abbr. + shortened version of the div node's title
+                teaser = '"' + normalize_space(re.sub(r'"', '', get_node_title(node))[:15]) + '…"'
+                passagetrail += ' ' + teaser
+            else:
+                if node.get('n') and re.match(r'^\[?\d+\]?$', node.get('n')):
+                    passagetrail += ' ' + node.get('n')
+
+                # trying to derive node position from div's siblings - deprecated, since we can do this better
+                # from within sal_index
+                """
+                elif is_passagetrail_node(node.xpath('parent::*')[0]) or len(get_passagetrail_ancestors(node)) == 0:
+                    # if the node's parent is a passagetrail node, or if there are no passagetrail ancestors
+                    # at all, we can simply count similar preceding siblings (if required)
+                    # first, count all similar preceding and following siblings to see if there are multiple such divs
+                    # on the same level:
+                    preceding_similar_siblings = []
+                    for prec in node.xpath('preceding-sibling::tei:div[@type = "' + node.get('type') +'"]',
+                                           namespaces=xml_ns):
+                        if is_passagetrail_node(prec):
+                            preceding_similar_siblings.append(prec)
+                    following_similar_siblings = []
+                    for foll in node.xpath('following-sibling::tei:div[@type = "' + node.get('type') + '"]',
+                                           namespaces=xml_ns):
+                        if is_passagetrail_node(foll):
+                            following_similar_siblings.append(foll)
+                    if (len(preceding_similar_siblings) + len(following_similar_siblings)) > 0:
+                        position = '[' + str(len(preceding_similar_siblings) + 1) + ']'
+                        # using "[]" to indicate automatic derivation of position
+                else:
+                    raise TEIMarkupError('tei:div neither has a numeric @n, nor could a position automatically be '
+                                         'derived from the number of similar preceding siblings (there might be '
+                                         'similar siblings above or below the preceding-sibling axis!)')
+                if position:
+                    return label + ' ' + position
+                else:
+                    return label
+                """
+        elif name == 'p':
+            teaser = '"' + normalize_space(re.sub(r'"', '', make_teaser_from_element(node))[:15]) + '…"'
+            passagetrail = citation_labels[name]['abbr'] + ' ' + teaser
+        elif name == 'text':
+            if node.get('type') == 'work_volume':
+                passagetrail = 'vol. ' + node.get('n')
+        elif node_type == 'marginal':
+            passagetrail = citation_labels['note']['abbr']
+            if node.get('n') and node.get('n'):
+                passagetrail += ' "' + node.get('n') + '"'
+        elif node_type == 'page':
+            if node.get('n') and re.match(r'fol\.', node.get('n')):
+                passagetrail = node.get('n')
+            else:
+                passagetrail = 'p. ' + node.get('n')
+    return passagetrail
+
+
+def is_passagetrail_node(node):
+    """
+    Determines if a node constitutes a 'passagetrail' part.
+    Note: assumes that get_elem_type(node) == True.
+    """
+    name = etree.QName(node).localname
+    return bool(exists(node, 'self::tei:text[@type = "work_volume"]') \
+                or (exists(node, 'self::tei:div') and citation_labels[node.get('type')]['isCiteRef']) \
+                or (exists(node, 'self::tei:milestone') and citation_labels[node.get('unit')]['isCiteRef']) \
+                or exists(node, 'self::tei:pb[not(@sameAs or @corresp)]') \
+                or (citation_labels.get(name) and citation_labels.get(name).get('isCiteRef')))
+
+
+# TODO is this necessary?
+#def get_passagetrail_ancestors(node):
+#    ancestors = []
+#    for anc in node.xpath('ancestor::*'):
+#        if get_elem_type(anc) and is_passagetrail_node(anc):
+#            ancestors.append(anc)
+#    return ancestors
+
+
+def get_preceding_passagetrail_siblings(node):
+    precedings = []
+    for prec in node.xpath('preceding-sibling::*'):
+        if is_passagetrail_node(prec):
+            precedings.append(prec)
+    return precedings
+
+# NODE TITLE UTIL FUNCTIONS
 
 
 def get_node_title(node):

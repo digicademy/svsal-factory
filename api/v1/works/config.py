@@ -86,8 +86,26 @@ class WorkConfig:
     def get_node_mappings(self):
         return self.node_mappings
 
-    def put_node_mapping(self, xml_id, citetrail):
-        self.node_mappings[xml_id] = citetrail
+
+    def get_citetrail_mapping(self, xml_id):
+        if self.node_mappings.get(xml_id) and self.node_mappings.get(xml_id).get('citetrail'):
+            return self.node_mappings[xml_id]['citetrail']
+
+
+    def get_passagetrail_mapping(self, xml_id):
+        if self.node_mappings.get(xml_id) and self.node_mappings.get(xml_id).get('passagetrail'):
+            return self.node_mappings[xml_id]['passagetrail']
+
+
+    def put_citetrail_mapping(self, xml_id, citetrail):
+        if not self.node_mappings.get(xml_id):
+            self.node_mappings[xml_id] = {}
+        self.node_mappings[xml_id]['citetrail'] = citetrail
+
+    def put_passagetrail_mapping(self, xml_id, passagetrail):
+        if not self.node_mappings.get(xml_id):
+            self.node_mappings[xml_id] = {}
+        self.node_mappings[xml_id]['passagetrail'] = passagetrail
 
     def get_citation_labels(self):
         return self.citation_labels
