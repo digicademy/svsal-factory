@@ -48,6 +48,7 @@ def html_dispatch_multiple(nodes):
     else:
         return
 
+
 # TODO: error handling
 def html_passthru(node):
     children = [html_dispatch(child) for child in node.xpath('node()')
@@ -80,10 +81,15 @@ def html_passthru(node):
 
 def html_passthru_append(orig_node, new_node):
     children = html_passthru(orig_node)
+    new_node = html_append_children(new_node, children)
+    return new_node
+
+
+def html_append_children(html_elem, children):
     preceding_elem = None
     for child in children:
         if etree.iselement(child):
-            new_node.append(child)
+            html_elem.append(child)
             preceding_elem = child
         elif isinstance(child, str):
             if not preceding_elem is None:
@@ -92,12 +98,12 @@ def html_passthru_append(orig_node, new_node):
                 else:
                     preceding_elem.tail = child
             else:
-                if new_node.text:
-                    new_node.text += child
+                if html_elem.text:
+                    html_elem.text += child
                 else:
-                    new_node.text = child
+                    html_elem.text = child
             # see also https://stackoverflow.com/questions/4624062/get-all-text-inside-a-tag-in-lxml
-    return new_node
+    return html_elem
 
 
 def html_text_node(node):
@@ -155,6 +161,10 @@ def html_del(node):
     if not exists(node, 'tei:supplied'):
         raise TEIMarkupError('No child tei:supplied exists in tei:del')
     return html_passthru(node)
+
+
+def html_div(node):
+    pass # TODO: make_section_teaser
 
 
 def html_docauthor(node):
@@ -453,14 +463,21 @@ def html_ref(node):
         return html_passthru_append(node, make_element_with_class('sup', 'ref-note'))
         # TODO: get reference to note, e.g. for highlighting
     elif node.get('target'):
-        pass
-        # TODO makeCitetrailUri
-
-
+        resolved_uri = make_uri_from_target(node, node.get('target'))
+        if resolved_uri:
+            return html_transform_node_to_link(node, resolved_uri)
+        else:
+            return html_passthru(node)
+    else:
+        return html_passthru(node)
 
 
 def html_row(node):
     return html_passthru_append(node, make_element('tr'))
+
+
+def html_sic(node):
+    return html_orig_elem(node)
 
 
 def html_signed(node):
@@ -471,19 +488,94 @@ def html_space(node):
     return txt_space(node, None)
 
 
+def html_supplied(node):
+    orig_text = txt_passthru(node, 'orig')
+    edit_text = txt_passthru(node, 'edit')
+    orig_span = make_element_with_class('span', orig_class + ' hidden supplied')
+    orig_span.set('title', edit_text) # assuming that title is not too long...
+    orig_span.text = '[' + orig_text + ']' # omitting any markup information here
+    edit_span = make_element_with_class('span', edit_class + ' supplied')
+    edit_span.set('title', '[' + orig_text + ']')  # assuming that title is not too long...
+    edit_span.text = edit_text  # omitting any markup information here
+    return [orig_span, edit_span]
+    # TODO testing, css and i18n
 
 
-# TODO:
+def html_table(node):
+    return html_passthru_append(node, make_element('table'))
 
 
-def html_sic(node):
-    return html_orig_elem(node)
+def html_term(node):
+    return html_name(node)
+
+
+def html_text(node):
+    if node.get('type') == 'work_volume' and exists(node, 'preceding::tei:text[@type = "work_volume"]'):
+        return make_element('hr')
+        # TODO: section_teaser + teaser anchor
+
+
+def html_title(node):
+    return html_name(node)
+
+
+def html_titlepage(node):
+    tp_class = 'titlepage'
+    if exists(node, 'preceding-sibling::tei:titlePage'):
+        tp_class = 'titlepage-sec'
+    return html_passthru_append(node, make_element_with_class('div', tp_class))
+    # TODO css
+
+
+def html_titlepart(node):
+    if node.get('type') == 'main':
+        return html_passthru_append(node, make_element('h1'))
+    else:
+        return html_passthru(node)
+
+
+def html_unclear(node):
+    unclear = make_element_with_class('span', 'unclear')
+    if exists(node, 'descendant::text()'):
+        return html_passthru_append(node, unclear)
+    else:
+        return unclear
+    # TODO css, i18n
 
 
 
+# TODO
+#  - make sure every function returns content, if required
 
 
 # HTML UTIL FUNCTIONS
+
+
+def html_transform_node_to_link(node: etree._Element, uri: str):
+    """
+    Transforms a $node into an HTML link anchor (a[@href]). Prevents child::tei:pb from occurring within the link, if required.
+    """
+    if not exists(node, 'child::tei:pb'):
+        a = html_make_a_with_href(uri, True)
+        return html_passthru_append(node, a)
+    else:
+        # make an anchor for the preceding part, then render the pb, then "continue" the anchor
+        # note that this currently works only if pb occurs at the child level, and only with the first pb
+        before_children = html_dispatch_multiple(node.xpath('child::tei:pb[1]/preceding-sibling::node()', namespaces=xml_ns))
+        before = html_append_children(html_make_a_with_href(uri, True), before_children)
+        page_break = html_dispatch(node.xpath('child::tei:pb[1]', namespaces=xml_ns))
+        after_children = html_dispatch_multiple(node.xpath('child::tei:pb[1]/following-sibling::node()', namespaces=xml_ns))
+        after = html_append_children(html_make_a_with_href(uri, True), after_children)
+        return [before, page_break, after]
+
+
+def html_make_a_with_href(href_value, target_blank=True):
+    a = etree.Element('a')
+    a.set('href', href_value)
+    if target_blank:
+        a.set('target', '_blank')
+    return a
+
 
 # TODO: testing, esp. from 1st "elif" onwards
 def make_uri_from_target(node, targets):
