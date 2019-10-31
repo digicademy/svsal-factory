@@ -3,7 +3,7 @@ import re
 from api.v1.xutils import flatten, is_element, is_text_node, xml_ns, exists, get_list_type, get_xml_id
 from api.v1.works.txt import *
 from api.v1.works.errors import TEIMarkupError, TEIUnkownElementError
-from api.v1.works.config import edit_class, orig_class, image_server, iiif_img_default_params, tei_text_elements
+from api.v1.works.config import edit_class, orig_class, image_server, iiif_img_default_params, tei_text_elements, id_server
 from api.v1.works.fragmentation import is_list_elem, is_main_elem, is_basic_list_elem, is_page_elem, is_anchor_elem
 from api.v1.works.analysis import get_node_title
 from base64 import b64encode
@@ -485,19 +485,67 @@ def html_sic(node):
 
 # HTML UTIL FUNCTIONS
 
-
+# TODO: testing, esp. from 1st "elif" onwards
 def make_uri_from_target(node, targets):
     target = targets.split()[0] # if there are several, first one wins
-
-    work_scheme = r'(work:(W[A-z0-9.:_\-]+))?#(.*)'
+    work_scheme = r'(work:(W[A-z0-9.:_\-]+))?#(.*)' # TODO is this failsafe?
     facs_scheme = r'facs:((W[0-9]+)[A-z0-9.:#_\-]+)'
     generic_scheme = r'(\S+):([A-z0-9.:#_\-]+)'
+    uri = target
     if target.startswith('#'):
         # target is some node in the current work
         targeted = node.xpath('ancestor::tei:TEI//tei:text//*[@xml:id = ' + target + ']', namespaces=xml_ns)
         if len(targeted) == 1:
-            pass # TODO makeCitetrailUri
+            uri = make_citetrail_uri_from_xml_id(get_xml_id(targeted[0]))
+    elif re.match(work_scheme, target):
+        # target is something like "work:W...#..."
+        if re.sub(work_scheme, '$2', target):
+            target_work_id = re.sub(work_scheme, '$2', target)
+            uri = id_server + '/texts/' + target_work_id
+            # TODO this merely refers to a complete work, how to handle specific nodes/citetrails?
+        else:
+            # target is just a link to a fragment anchor, so targetWorkId = currentWork
+            anchor_id = re.sub(work_scheme, '$3', target)
+            if anchor_id:
+                uri = make_citetrail_uri_from_xml_id(anchor_id)
+    elif re.match(facs_scheme, target):
+        # target is a facs string
+        target_work_id = re.sub(facs_scheme, '$2', target)
+        if target_work_id == node.xpath('preceding::tei:lb', namespaces=xml_ns)[0]: # TODO: workaround for dynamic config
+            # facs is in the same work
+            pb = node.xpath('ancestor::tei:TEI//tei:pb[@facs = "' + target + '"' \
+                            + ' and not(@sameAs or @corresp) and @xml:id]', namespaces=xml_ns)
+            if len(pb) > 0:
+                uri = make_citetrail_uri_from_xml_id(get_xml_id(pb[0]))
+        else:
+            raise TEIMarkupError('@target refers to @facs from a different work than the current one')
+    elif re.match(generic_scheme, target):
+        from api.v1.works.factory import config
+        # use the general replacement mechanism as defined by the teiHeader's prefixDef
+        prefix = re.sub(generic_scheme, '$1', target)
+        value = re.sub(generic_scheme, '$2', target)
+        prefix_def = config.get_prefix_defs().get(prefix)
+        if prefix_def:
+            if re.match(prefix_def['matchPattern'], value):
+                uri = re.sub(prefix_def['matchPattern'], prefix_def['replacementPattern'], value)
+        else:
+            search = re.search(generic_scheme, target)
+            uri = re.sub(generic_scheme, '$0', target) # TODO is this working?
+    return uri
 
+
+def make_citetrail_uri_from_xml_id(id: str):
+    """
+    Tries to derive the citetrail for a node from its @xml:id. Works only if the node/@xml:id is in work "config.wid"
+    """
+    from api.v1.works.factory import config
+    citetrail = config.get_citetrail_mapping(id)
+    wid = id[:5] # TODO this is a workaround until config is passed dynamically
+    if citetrail:
+        print('Deriving citetrail ' + citetrail + ' from xml:id ' + id)
+        return id_server + '/texts/' + wid + ':' + citetrail
+    else:
+        return ''
 
 
 def facs_to_uri(pb_facs):

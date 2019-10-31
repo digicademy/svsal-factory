@@ -2,7 +2,11 @@ from lxml import etree
 from api.v1.xutils import xml_ns
 
 
+# TEMPORARY / DEBUGGING
+id_server = 'https://id.salamanca.school'
 image_server = 'https://facs.salamanca.school' # TODO
+
+# IIIF
 iiif_img_default_params = '/full/full/0/default.jpg' # TODO
 
 tei_text_elements = ('g', 'lb', 'pb', 'cb', 'head', 'p', 'note', 'div', 'milestone', 'choice', 'abbr', 'orig', 'sic',
@@ -64,11 +68,14 @@ edit_class = 'edit'
 
 
 class WorkConfig:
-    def __init__(self):
+    def __init__(self, wid, node_count=0):
+        self.wid = wid
         self.citation_labels = citation_labels
         self.teaser_length = teaser_length
         self.chars = None
+        self.prefix_defs = {}
         self.node_mappings = {}
+        self.node_count = node_count
 
     def get_chars(self):
         return self.chars
@@ -82,6 +89,16 @@ class WorkConfig:
                 mappings[mapping.get('type')] = mapping.text
             chars[id] = mappings
         self.chars = chars
+
+    def get_prefix_defs(self):
+        return self.prefix_defs
+
+    def set_prefix_def(self, prefix_def: etree._Element):
+        this_def = {}
+        ident = prefix_def.get('ident')
+        this_def['matchPattern'] = prefix_def.get('matchPattern')
+        this_def['replacementPattern'] = prefix_def.get('replacementPattern')
+        self.prefix_defs[ident] = this_def
 
     def get_node_mappings(self):
         return self.node_mappings

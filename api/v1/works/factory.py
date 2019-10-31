@@ -7,15 +7,20 @@ from lxml import etree
 import re
 
 
-config = WorkConfig()
+config = WorkConfig('', node_count=0) # TODO wid
+#config = None # TODO: conflicts between multiple parallel calls to transform()?
 
 
 def transform(wid, xml_data):
     root = etree.fromstring(xml_data)
     #validate(wid, root)
 
+    # put some technical metadata from the teiHeader into config
     char_decl = root.xpath('descendant::tei:charDecl', namespaces=xml_ns)[0]
     config.set_chars(char_decl)
+    prefix_defs = root.xpath('descendant::tei:prefixDef', namespaces=xml_ns)
+    for pd in prefix_defs:
+        config.set_prefix_def(pd)
 
     text = root.xpath('child::tei:text', namespaces=xml_ns)[0]
 
