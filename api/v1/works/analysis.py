@@ -38,6 +38,13 @@ def extract_text_structure(wid, node):
             if citetrail_parent_id:
                 sal_node.set('citetrailParent', citetrail_parent_id)
 
+            # LEVEL
+            level = len(citetrail_ancestors)
+            node.set('level', str(level)) # TODO does this work with marginals and pages?
+            from api.v1.works.factory import config
+            if config.get_cite_depth() < level:
+                config.set_cite_depth(level)
+
             # PASSAGETRAIL (preliminary and not yet concatenated with parent's passagetrail)
             preliminary_passage = get_passagetrail(node, node_type)
             if is_passagetrail_node(node):
@@ -60,22 +67,16 @@ def extract_text_structure(wid, node):
                 # TODO: use citetrail rather than xml:id of listParent
                 # TODO: some information about the kind of list (get_list_type)? in items or list?
 
-            # TODO?:
-            # DIV (add @type as @divType)
-            #name = etree.QName(node).localname
-            #if name == 'div':
-            #    sal_node.set('divType', node.get('type'))
-
             # CHILD NODES
             children = list(flatten([extract_text_structure(wid, child) for child in node]))
             # TODO sal_title: note titles (as well as citetrails) need to be suffixed by their position / number
             if len(children) > 0:
                 sal_children = etree.Element('children')
-                for sal_child in children:
-                    if etree.iselement(sal_child):
-                        sal_children.append(sal_child)
-                    elif isinstance(sal_child, list):
-                        raise NodeIndexingError('Found list: ' + '; '.join(sal_child) + ' instead of child::sal_node')
+                for child in children:
+                    if etree.iselement(child):
+                        sal_children.append(child)
+                    elif isinstance(child, list):
+                        raise NodeIndexingError('Found list: ' + '; '.join(child) + ' instead of child::sal_node')
                 sal_node.append(sal_children)
             return sal_node
         else:
@@ -89,13 +90,33 @@ def enrich_index(sal_index):
     enriched_index = etree.Element('sal_index')
     node_count = 0
     for node in sal_index.iter('sal_node'):
-        print('enrich_index: Processing node ' + node.get('id'))
+        sal_node_id = node.get('id')
+        print('enrich_index: Processing node ' + sal_node_id)
         enriched_node = etree.Element('sal_node')
         copy_attributes(node, enriched_node)
 
         # POSITION of node
         enriched_node.set('n', str(node_count))
         node_count = node_count + 1
+
+        # MEMBER (list of xml:id, separated by ';')
+        if exists(node, 'children'):
+            member = []
+            for m in node.xpath('children/child::sal_node[@citetrailParent = "' + sal_node_id + '"]'):
+                member.append(m.get('id'))
+            enriched_node.set('member', ';'.join(member))
+
+        # PREV/NEXT NODES
+        # we set prev/next only for structural and main nodes
+        if node.get('type') in ('main', 'structural'):
+            prev = node.xpath('preceding-sibling::sal_node[@type = "main" or @type = "structural"][1]')
+            next = node.xpath('following-sibling::sal_node[@type = "main" or @type = "structural"][1]')
+            # TODO this gets next/prev fragments of any level - does this align with dts?
+            if len(prev):
+                enriched_node.set('prev', prev[0].get('id'))
+            if len(next):
+                enriched_node.set('next', next[0].get('id'))
+
 
         # CITETRAIL
         # determine citetrail position based on preceding-sibling::sal_node with similar @cite
@@ -118,11 +139,13 @@ def enrich_index(sal_index):
             # since iter() is depth-first, we can assume that the parent's full citetrail has already been registered
             parent_citetrail = config.get_citetrail_mapping(node.get('citetrailParent'))
             full_citetrail = parent_citetrail + '.' + revised_cite
+            enriched_node.set('citetrailParent', parent_citetrail) # overwrite old xml:id-based value
             enriched_node.set('citetrail', full_citetrail)
             config.put_citetrail_mapping(node.get('id'), full_citetrail)
         else:
             enriched_node.set('citetrail', revised_cite)
             config.put_citetrail_mapping(node.get('id'), revised_cite)
+        # TODO: prev, next, up
 
         # PASSAGETRAIL
         this_passage = node.get('passage')
@@ -168,10 +191,8 @@ def enrich_index(sal_index):
             config.put_passagetrail_mapping(node.get('id'), revised_passage)
             # if passage does not exist, we set an empty passagetrail
 
-
         # FINALIZATION
         enriched_index.append(enriched_node)
-        # make full-blown citetrails
     return enriched_index
 
 

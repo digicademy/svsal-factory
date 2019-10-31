@@ -76,6 +76,13 @@ class WorkConfig:
         self.prefix_defs = {}
         self.node_mappings = {}
         self.node_count = node_count
+        self.cite_depth = 0
+
+    def get_cite_depth(self):
+        return self.cite_depth
+
+    def set_cite_depth(self, value):
+        self.cite_depth = value
 
     def get_chars(self):
         return self.chars
@@ -103,16 +110,13 @@ class WorkConfig:
     def get_node_mappings(self):
         return self.node_mappings
 
-
     def get_citetrail_mapping(self, xml_id):
         if self.node_mappings.get(xml_id) and self.node_mappings.get(xml_id).get('citetrail'):
             return self.node_mappings[xml_id]['citetrail']
 
-
     def get_passagetrail_mapping(self, xml_id):
         if self.node_mappings.get(xml_id) and self.node_mappings.get(xml_id).get('passagetrail'):
             return self.node_mappings[xml_id]['passagetrail']
-
 
     def put_citetrail_mapping(self, xml_id, citetrail):
         if not self.node_mappings.get(xml_id):
@@ -126,3 +130,6 @@ class WorkConfig:
 
     def get_citation_labels(self):
         return self.citation_labels
+
+    def get_wid(self):
+        return self.wid
