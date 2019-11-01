@@ -65,24 +65,3 @@ def transform(wid, xml_data):
     with open('tests/resources/out/' + wid + '_resources.json', 'w') as fo:
         fo.write(json.dumps(resources, indent=4))
 
-
-
-    #final_index_str = etree.tostring(enriched_index, pretty_print=True, encoding="UTF-8")
-    #with open('tests/resources/out/' + wid + "_finalIndex.xml", "wb") as fo:
-    #    fo.write(final_index_str)
-
-
-"""
-    # HTML
-    #test_p = text.xpath('//*[@xml:id = "W0034-00-0003-pa-03eb"]', namespaces=xml_ns)[0]
-    #transformed = html_dispatch(test_p)
-    #print(etree.tostring(transformed))
-
-    #TXT
-    #txt_orig = re.sub(r' {2,}', ' ', txt_dispatch(test_p, 'orig'))
-    #txt_edit = re.sub(r' {2,}', ' ', ''.join(txt_dispatch(test_p, 'edit')))
-
-
-# TODO:
-#   - extract_text_structure yields more sal_nodes for W0013 than current render.xql
-"""

@@ -22,6 +22,8 @@ def txt_dispatch(node, mode):
             raise TEIUnkownElementError('Unknown element: ' + etree.QName(node).localname)
     elif is_text_node(node):
         return txt_text_node(node)
+    else:
+        return ''
     # omit comments and processing instructions
 
 
@@ -41,6 +43,8 @@ def txt_passthru(node, mode):
             else:
                 children.append(txt_dispatch(child, mode))
         return ''.join(list(flatten(children)))
+    else:
+        return ''
 
 
 def txt_text_node(node):
@@ -52,8 +56,7 @@ def txt_text_node(node):
 
 
 def txt_abbr(node, mode):
-    if not (mode == 'edit' and exists(node, 'parent::tei:choice/tei:expan')):
-        return txt_passthru(node, mode)
+    return txt_orig_elem(node, mode)
 
 
 def txt_bibl(node, mode):
@@ -74,10 +77,7 @@ def txt_cb(node, mode):
 
 
 def txt_corr(node, mode):
-    if mode == 'orig' and exists(node, 'parent::tei:choice/tei:sic'):
-        return
-    else:
-        return txt_passthru(node, mode)
+    return txt_edit_elem(node, mode)
 
 
 def txt_div(node, mode): # nr
@@ -93,14 +93,11 @@ def txt_doctitle(node, mode):
 
 
 def txt_expan(node, mode):
-    if mode == 'orig' and exists(node, 'parent::tei:choice/tei:abbr'):
-        return ''
-    else:
-        return txt_passthru(node, mode)
+    return txt_edit_elem(node, mode)
 
 
 def txt_figure(node, mode):
-    return
+    return ''
 
 
 def txt_g(node, mode):
@@ -123,7 +120,7 @@ def txt_g(node, mode):
 
 
 def txt_gap(node, mode):
-    return
+    return ''
 
 
 def txt_imprint(node, mode):
@@ -198,6 +195,15 @@ def txt_name(node, mode):
         return text
 
 
+def txt_note(node, mode):
+    text = txt_passthru(node, mode)
+    return '{\n\t' + text + '\n}' # TODO separate notes from surrounding text rather during final txt serialization?
+
+
+def txt_orig(node, mode):
+    return txt_orig_elem(node, mode)
+
+
 def txt_p(node, mode):
     text = txt_passthru(node, mode)
     if exists(node, 'ancestor::tei:note'):
@@ -235,8 +241,24 @@ def txt_placename(node, mode):
         return txt_passthru(node, mode)
 
 
+def txt_publisher(node, mode):
+    return txt_persname(node, mode)
+
+
+def txt_pubplace(node, mode):
+    return txt_placename(node, mode)
+
+
 def txt_quote(node, mode):
     return '"' + txt_passthru(node, mode) + '"'
+
+
+def txt_reg(node, mode):
+    return txt_edit_elem(node, mode)
+
+
+def txt_sic(node, mode):
+    return txt_orig_elem(node, mode)
 
 
 def txt_socalled(node, mode):
@@ -266,41 +288,22 @@ def txt_titlepage(node, mode):
     return txt_passthru(node, mode) + '\n'
 
 
-def txt_publisher(node, mode):
-    return txt_persname(node, mode)
-
-
-def txt_pubplace(node, mode):
-    return txt_placename(node, mode)
-
-
-def txt_note(node, mode):
-    text = txt_passthru(node, mode)
-    return '{\n\t' + text + '\n}' # TODO separate notes from surrounding text rather during final txt serialization?
-
-
-def txt_orig(node, mode):
-    if mode == 'edit' and exists(node, 'parent::tei:choice/tei:reg'):
-        return
-    else:
-        return txt_passthru(node, mode)
-
-
-def txt_reg(node, mode):
-    if mode == 'orig' and exists(node, 'parent::tei:choice/tei:orig'):
-        return
-    else:
-        return txt_passthru(node, mode)
-
-
-def txt_sic(node, mode):
-    if mode == 'edit' and exists(node, 'parent::tei:choice/tei:corr'):
-        return
-    else:
-        return txt_passthru(node, mode)
-
-
 # TXT UTIL FUNCTIONS
+
+
+def txt_edit_elem(node, mode):
+    if mode == 'edit':
+        return txt_passthru(node, mode)
+    else:
+        return ''
+
+
+def txt_orig_elem(node, mode):
+    if mode == 'orig' or not exists(node, 'parent::tei:choice/*[self::tei:expan or self::tei:corr or self::tei:reg]'):
+        return txt_passthru(node, mode)
+    else:
+        return ''
+
 
 def normalize_space(text):
     return ' '.join(text.split())

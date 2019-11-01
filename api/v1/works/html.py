@@ -1,6 +1,6 @@
 from lxml import etree
 import re
-from api.v1.xutils import flatten, is_element, is_text_node, xml_ns, exists, get_list_type, get_xml_id
+from api.v1.xutils import flatten, is_element, is_text_node, xml_ns, exists, get_list_type, get_xml_id, get_target_node
 from api.v1.works.txt import *
 from api.v1.works.errors import TEIMarkupError, TEIUnkownElementError
 from api.v1.works.config import edit_class, orig_class, image_server, iiif_img_default_params, tei_text_elements, id_server
@@ -45,8 +45,6 @@ def html_dispatch_multiple(nodes):
         dispatched.append(html_dispatch(node))
     if len(dispatched) > 0:
         return list(flatten(dispatched))
-    else:
-        return
 
 
 # TODO: error handling
@@ -343,7 +341,7 @@ def html_lb(node):
 
 
 def html_lg(node):
-    return html_passthru_append(make_element_with_class('div', 'poem'))
+    return html_passthru_append(node, make_element_with_class('div', 'poem'))
 
 
 def html_milestone_inline(node):
@@ -415,6 +413,7 @@ def html_pb_inline(node):
 
 def html_pb(node):
     if is_page_elem(node):
+        print('html: processing pb ' + get_xml_id(node))
         pb_id = get_xml_id(node)
         title = node.get('n')
         if not re.match(r'^fol\.', title):
@@ -564,7 +563,7 @@ def html_transform_node_to_link(node: etree._Element, uri: str):
         # note that this currently works only if pb occurs at the child level, and only with the first pb
         before_children = html_dispatch_multiple(node.xpath('child::tei:pb[1]/preceding-sibling::node()', namespaces=xml_ns))
         before = html_append_children(html_make_a_with_href(uri, True), before_children)
-        page_break = html_dispatch(node.xpath('child::tei:pb[1]', namespaces=xml_ns))
+        page_break = html_dispatch(node.xpath('child::tei:pb[1]', namespaces=xml_ns)[0])
         after_children = html_dispatch_multiple(node.xpath('child::tei:pb[1]/following-sibling::node()', namespaces=xml_ns))
         after = html_append_children(html_make_a_with_href(uri, True), after_children)
         return [before, page_break, after]
@@ -587,7 +586,7 @@ def make_uri_from_target(node, targets):
     uri = target
     if target.startswith('#'):
         # target is some node in the current work
-        targeted = node.xpath('ancestor::tei:TEI//tei:text//*[@xml:id = "' + target + '"]', namespaces=xml_ns)
+        targeted = get_target_node(node, id=target[1:])
         if len(targeted) == 1:
             uri = make_citetrail_uri_from_xml_id(get_xml_id(targeted[0]))
     elif re.match(work_scheme, target):
@@ -604,9 +603,9 @@ def make_uri_from_target(node, targets):
     elif re.match(facs_scheme, target):
         # target is a facs string
         target_work_id = re.sub(facs_scheme, '$2', target)
-        if target_work_id == node.xpath('preceding::tei:lb', namespaces=xml_ns)[0]: # TODO: workaround for dynamic config
+        if target_work_id == node.xpath('preceding::tei:lb[1]', namespaces=xml_ns)[0]: # TODO: workaround for dynamic config
             # facs is in the same work
-            pb = node.xpath('ancestor::tei:TEI//tei:pb[@facs = "' + target + '"' \
+            pb = node.xpath('ancestor::tei:TEI//tei:pb[@facs = "' + target + '"'
                             + ' and not(@sameAs or @corresp) and @xml:id]', namespaces=xml_ns)
             if len(pb) > 0:
                 uri = make_citetrail_uri_from_xml_id(get_xml_id(pb[0]))

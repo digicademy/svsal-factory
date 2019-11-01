@@ -4,6 +4,7 @@ from api.v1.works.txt import txt_dispatch, normalize_space
 from api.v1.works.config import teaser_length as config_teaser_length, citation_labels
 from api.v1.works.fragmentation import *
 from api.v1.works.errors import NodeIndexingError, TEIMarkupError
+from xml.sax.saxutils import quoteattr
 import re
 
 
@@ -46,9 +47,11 @@ def extract_text_structure(wid, node):
                 config.set_cite_depth(level)
 
             # PASSAGETRAIL (preliminary and not yet concatenated with parent's passagetrail)
-            preliminary_passage = get_passagetrail(node, node_type)
             if is_passagetrail_node(node):
-                sal_node.set('passage', preliminary_passage)
+                preliminary_passage = get_passagetrail(node, node_type)
+                sal_passage = etree.Element('passage')
+                sal_passage.text = preliminary_passage
+                sal_node.append(sal_passage)
             passagetrail_ancestors = get_citable_ancestors(node, node_type, 'passagetrail')
             passagetrail_parent_id = None
             if passagetrail_ancestors:
@@ -91,7 +94,7 @@ def enrich_index(sal_index):
     node_count = 0
     for node in sal_index.iter('sal_node'):
         sal_node_id = node.get('id')
-        print('enrich_index: Processing node ' + sal_node_id)
+        #print('enrich_index: Processing node ' + sal_node_id)
         enriched_node = etree.Element('sal_node')
         copy_attributes(node, enriched_node)
 
@@ -149,10 +152,11 @@ def enrich_index(sal_index):
         # TODO: prev, next, up
 
         # PASSAGETRAIL
-        this_passage = node.get('passage')
+        this_passage = node.xpath('passage/text()')
         revised_passage = ''
-        if this_passage:
-            revised_passage = this_passage
+        if len(this_passage):
+            revised_passage = str(this_passage[0])
+            #print('revised_passage is: ' + revised_passage)
             # for div, milestones, and notes: determine passagetrail position based on preceding::sal_node with similar
             # passagetrails within *the same passagetrail section* (structure is more complicated than with citetrails,
             # since parent::sal_node is not necessarily a passagetrail "parent")
@@ -160,16 +164,18 @@ def enrich_index(sal_index):
             if node.get('name') in ('div', 'milestone') or node.get('type') == 'note':
                 passagetrail_parent = None
                 if node.get('passagetrailParent'):
-                    passagetrail_parent = node.xpath('ancestor::*[@id = "' + node.get('passagetrailParent') + '"]')[0]
+                    passagetrail_parent = node.xpath('ancestor::*[@id = "' + node.get('passagetrailParent') + '"][1]')[0]
                 else:
                     # if there is no passagetrail parent, take the sal_index root:
-                    passagetrail_parent = node.xpath('ancestor::sal_index')[0]
+                    passagetrail_parent = node.xpath('ancestor::sal_index[1]')[0]
                 passagetrail_ancestors_n = node.get('passagetrailAncestorsN')
-                similar = passagetrail_parent.xpath('descendant::sal_node[@name = "' + node.get('name') + '"'
-                                                              + ' and @passage = "' + this_passage + '"'
-                                                              + ' and @passagetrailAncestorsN = '
-                                                              + passagetrail_ancestors_n
-                                                              + ']')
+                # using double quotes here as string markers for dealing with single/double quotes in passages
+                similar_xpath = "descendant::sal_node[@name = '" + node.get('name') + "'" \
+                                                      + " and ./passage/text() = '" + revised_passage + "'" \
+                                                      + " and @passagetrailAncestorsN = " \
+                                                      + "'" + passagetrail_ancestors_n + "']"
+                print('similar_xpath: ' + similar_xpath)
+                similar = passagetrail_parent.xpath(similar_xpath)
                 if len(similar) > 0:
                     similar_preceding = []
                     for s in similar:
@@ -283,8 +289,7 @@ def get_citable_ancestors(node: etree._Element, node_type: str, mode: str):
         for anc in tei_ancestors:
             if (mode == 'citetrail' or (mode == 'passagetrail' and is_passagetrail_node(anc))) and get_elem_type(anc):
                 ancestors.append(anc)
-    return ancestors
-
+    return ancestors[::-1] # ancestors.reverse() is not working here
 
 # PASSAGETRAIL UTIL FUNCTIONS
 
@@ -335,18 +340,12 @@ def is_passagetrail_node(node):
     """
     name = etree.QName(node).localname
     return bool(exists(node, 'self::tei:text[@type = "work_volume"]') \
-                or (exists(node, 'self::tei:div') and citation_labels[node.get('type')]['isCiteRef']) \
-                or (exists(node, 'self::tei:milestone') and citation_labels[node.get('unit')]['isCiteRef']) \
+                or (exists(node, 'self::tei:div') and citation_labels[node.get('type')].get('isCiteRef')) \
+                or (exists(node, 'self::tei:milestone') and citation_labels[node.get('unit')].get('isCiteRef')) \
                 or exists(node, 'self::tei:pb[not(@sameAs or @corresp)]') \
                 or (citation_labels.get(name) and citation_labels.get(name).get('isCiteRef')))
 
 
-def get_preceding_passagetrail_siblings(node):
-    precedings = []
-    for prec in node.xpath('preceding-sibling::*'):
-        if is_passagetrail_node(prec):
-            precedings.append(prec)
-    return precedings
 
 # NODE TITLE UTIL FUNCTIONS
 
@@ -364,8 +363,9 @@ def get_node_title(node):
             title = make_teaser_from_element(node.xpath('tei:label[1]', namespaces=xml_ns)[0])
         elif node.get('n') and node.get('type'):
             title = node.get('n')
-        elif exists(node, 'ancestor::tei:TEI//tei:text//tei:ref[@target = "#'+ xml_id +'"]'):
-            title = make_teaser_from_element(node.xpath('ancestor::tei:TEI//tei:text//tei:ref[@target = "#'+ xml_id +'"][1]')[0])
+        elif exists(node, 'ancestor::tei:TEI//tei:text//tei:ref[@target = "#' + xml_id + '"]'):
+            title = make_teaser_from_element(node.xpath('ancestor::tei:TEI//tei:text//tei:ref[@target = "#' + xml_id
+                                                        + '"][1]')[0])
         elif exists(node, 'tei:list/tei:head'):
             title = make_teaser_from_element(node.xpath('tei:list/tei:head[1]', namespaces=xml_ns)[0])
         elif exists(node, 'tei_list/tei:label'):

@@ -57,6 +57,10 @@ def get_list_type(node):
     else:
         return ''
 
-def copy_attributes(from_elem, to_elem):
+def copy_attributes(from_elem: etree._Element, to_elem: etree._Element):
     for name, value in from_elem.items():
         to_elem.set(name, value)
+
+
+get_target_node = etree.XPath('ancestor::tei:TEI/tei:text//*[@xml:id = $id]', namespaces=xml_ns)
+

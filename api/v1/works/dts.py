@@ -19,6 +19,7 @@ def make_resource_metadata(sal_node: etree._Element, config):
             member.append({'dts:ref': member_citetrail})
         metadata['member'] = member
     return metadata
+    # TODO sal:passage(trail)
     # first? last?
     # dts:citeType? sal:extensions?
 
