@@ -359,7 +359,7 @@ def html_milestone_inline(node):
 
 
 def html_name(node):
-    span = make_element_with_class('span', 'name ' + etree.QName(node).localname)
+    span = make_element_with_class('span', 'name ' + etree.QName(node).localname.lower())
     if node.get('key'):
         span.set('title', node.get('key'))
     return html_passthru_append(node, span)
@@ -400,9 +400,9 @@ def html_pb_inline(node):
     if is_page_elem(node):
         if node.get('type') == 'blank':
             return make_element('br')
-        elif exists(node, 'preceding::tei:pb '
-                          + 'and preceding-sibling::node()[descendant-or-self::text()[not(normalize-space() = '')]] '
-                          + 'and following-sibling::node()[descendant-or-self::text()[not(normalize-space() = '')]]]'):
+        elif exists(node, 'preceding::tei:pb'
+                          + ' and preceding-sibling::node()[descendant-or-self::text()[not(normalize-space() = "")]]'
+                          + ' and following-sibling::node()[descendant-or-self::text()[not(normalize-space() = "")]]'):
             # mark page break as '|', but not at the beginning or end of structural sections
             pb = make_element_with_class('span', 'pb')
             pb.set('id', get_xml_id(node))
@@ -414,21 +414,22 @@ def html_pb_inline(node):
 
 
 def html_pb(node):
-    pb_id = get_xml_id(node)
-    title = node.get('n')
-    if not re.match(r'^fol\.', title):
-        title = 'p. ' + title
-    page_link = make_element_with_class('a', 'page-link')
-    page_link.set('title', title)
-    page_link.set(facs_to_uri(node.get('facs')))
-    # TODO i18n 'View image of ' + title
-    page_link.append(make_element_with_class('i', 'fas fa-book-open'))
-    label = make_element_with_class('span', 'page-label')
-    label.text = get_node_title(node)
-    page_link.append(label)
-    return page_link
-    # TODO data-canvas / render:resolveCanvasID !
-    # TODO css
+    if is_page_elem(node):
+        pb_id = get_xml_id(node)
+        title = node.get('n')
+        if not re.match(r'^fol\.', title):
+            title = 'p. ' + title
+        page_link = make_element_with_class('a', 'page-link')
+        page_link.set('title', title)
+        page_link.set('href', facs_to_uri(node.get('facs')))
+        # TODO i18n 'View image of ' + title
+        page_link.append(make_element_with_class('i', 'fas fa-book-open'))
+        label = make_element_with_class('span', 'page-label')
+        label.text = get_node_title(node)
+        page_link.append(label)
+        return page_link
+        # TODO data-canvas / render:resolveCanvasID !
+        # TODO css
 
 
 def html_persname(node):
@@ -586,7 +587,7 @@ def make_uri_from_target(node, targets):
     uri = target
     if target.startswith('#'):
         # target is some node in the current work
-        targeted = node.xpath('ancestor::tei:TEI//tei:text//*[@xml:id = ' + target + ']', namespaces=xml_ns)
+        targeted = node.xpath('ancestor::tei:TEI//tei:text//*[@xml:id = "' + target + '"]', namespaces=xml_ns)
         if len(targeted) == 1:
             uri = make_citetrail_uri_from_xml_id(get_xml_id(targeted[0]))
     elif re.match(work_scheme, target):
@@ -660,7 +661,8 @@ def facs_to_uri(pb_facs):
 
 def html_orig_elem(node):
     if exists(node, 'parent::tei:choice'):
-        edit_elem = node.xpath('parent::tei:choice/(tei:expan|tei:reg|tei:corr)', namespaces=xml_ns)[0]
+        edit_elem = node.xpath('parent::tei:choice/*[self::tei:expan or self::tei:reg or self::tei:corr]',
+                               namespaces=xml_ns)[0]
         edit_str = txt_dispatch(edit_elem, 'edit')
         span = make_element_with_class('span', orig_class + ' ' + etree.QName(node).localname)
         span.set('title', edit_str)
@@ -674,6 +676,7 @@ def html_make_marginal(node):
     note.set('id', get_xml_id(node))
     if node.get('n'):
         label = make_element_with_class('span', 'marginal-label')
+        label.text = node.get('n')
         note.append(label)
     if exists(node, 'tei:p'):
         return html_passthru_append(node, note)

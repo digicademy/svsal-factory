@@ -39,8 +39,8 @@ def extract_text_structure(wid, node):
                 sal_node.set('citetrailParent', citetrail_parent_id)
 
             # LEVEL
-            level = len(citetrail_ancestors)
-            node.set('level', str(level)) # TODO does this work with marginals and pages?
+            level = len(citetrail_ancestors) + 1
+            sal_node.set('level', str(level)) # TODO does this work with marginals and pages?
             from api.v1.works.factory import config
             if config.get_cite_depth() < level:
                 config.set_cite_depth(level)
@@ -111,7 +111,8 @@ def enrich_index(sal_index):
         if node.get('type') in ('main', 'structural'):
             prev = node.xpath('preceding-sibling::sal_node[@type = "main" or @type = "structural"][1]')
             next = node.xpath('following-sibling::sal_node[@type = "main" or @type = "structural"][1]')
-            # TODO this gets next/prev fragments of any level - does this align with dts?
+            # TODO this assumes that dts:next/prev should refer only to resources on the same level
+            #  - or can 3.1's next refer to 4 if there is no 3.2?
             if len(prev):
                 enriched_node.set('prev', prev[0].get('id'))
             if len(next):

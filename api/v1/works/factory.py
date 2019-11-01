@@ -3,7 +3,9 @@ from api.v1.works.html import html_dispatch
 from api.v1.works.txt import txt_dispatch
 from api.v1.xutils import xml_ns, flatten
 from api.v1.works.config import WorkConfig
+from api.v1.works.dts import make_resource_metadata
 from lxml import etree
+import json
 import re
 
 
@@ -39,37 +41,37 @@ def transform(wid, xml_data):
     index_str = etree.tostring(enriched_index, pretty_print=True)
     with open('tests/resources/out/' + wid + "_index.xml", "wb") as fo:
         fo.write(index_str)
-    # TODO
 
-""" 
-    # add txt, html etc., and flatten node index
-    final_index = etree.Element('sal_index')
-    n = 1
-    for node in index0.xpath('descendant::sal_node'): # TODO: does this maintain document order?
-        node_id = node.get('id')
-        #print('Processing node ' + node_id)
-        tei_node = root.xpath('//*[@xml:id = "' + node_id + '"]', namespaces=xml_ns)[0]
-        sal_node = etree.Element('sal_node')
-        sal_node.set('id', node_id)
-        sal_node.set('n', str(n)) # essential field for keeping track of order and positions of elements downstream
-        # txt
-        node_edit = txt_dispatch(tei_node, 'edit')
-        node_orig = txt_dispatch(tei_node, 'orig')
-        sal_txt_orig = etree.Element('sal_txt_orig')
-        sal_txt_orig.text = node_orig
-        sal_txt_edit = etree.Element('sal_txt_edit')
-        sal_txt_edit.text = node_edit
-        sal_node.append(sal_txt_orig)
-        sal_node.append(sal_txt_edit)
-        # html
-        # TODO
-        # out
-        final_index.append(sal_node) 
-        n += 1
+    resources = []
+    for node in enriched_index.iter('sal_node'):
+        fragment = {}
+        dts_resource_metadata = make_resource_metadata(node, config)
+        fragment.update(dts_resource_metadata)
+        fragment['basic'] = False
+        if node.get('basic') == 'true':
+            fragment['basic'] = True
+            node_id = node.get('id')
+            tei_node = root.xpath('//*[@xml:id = "' + node_id + '"]', namespaces=xml_ns)[0]
+            # TXT
+            txt_edit = txt_dispatch(tei_node, 'edit')
+            txt_orig = txt_dispatch(tei_node, 'orig')
+            # HTML
+            html_nodes = html_dispatch(tei_node) # this assumes that
+            html = etree.tostring(html_nodes, encoding="UTF-8") # this assumes that there is exactly 1 html root
+            content = {'txt_edit': txt_edit, 'txt_orig': txt_orig, 'html': str(html, encoding='UTF-8')}
+            fragment.update(content)
+            # TODO TEI
+        resources.append(fragment)
+    with open('tests/resources/out/' + wid + '_resources.json', 'w') as fo:
+        fo.write(json.dumps(resources, indent=4))
 
-    final_index_str = etree.tostring(final_index, pretty_print=True, encoding="UTF-8")
-    with open('tests/resources/out/' + wid + "_finalIndex.xml", "wb") as fo:
-        fo.write(final_index_str)
+
+
+    #final_index_str = etree.tostring(enriched_index, pretty_print=True, encoding="UTF-8")
+    #with open('tests/resources/out/' + wid + "_finalIndex.xml", "wb") as fo:
+    #    fo.write(final_index_str)
+
+
 """
     # HTML
     #test_p = text.xpath('//*[@xml:id = "W0034-00-0003-pa-03eb"]', namespaces=xml_ns)[0]
@@ -83,3 +85,4 @@ def transform(wid, xml_data):
 
 # TODO:
 #   - extract_text_structure yields more sal_nodes for W0013 than current render.xql
+"""
