@@ -149,7 +149,11 @@ def enrich_index(sal_index):
         else:
             enriched_node.set('citetrail', revised_cite)
             config.put_citetrail_mapping(node.get('id'), revised_cite)
-        # TODO: prev, next, up
+
+
+        # CRUMBTRAIL
+        # TODO?
+
 
         # PASSAGETRAIL
         this_passage = node.xpath('passage/text()')
@@ -174,7 +178,6 @@ def enrich_index(sal_index):
                                                       + " and ./passage/text() = '" + revised_passage + "'" \
                                                       + " and @passagetrailAncestorsN = " \
                                                       + "'" + passagetrail_ancestors_n + "']"
-                print('similar_xpath: ' + similar_xpath)
                 similar = passagetrail_parent.xpath(similar_xpath)
                 if len(similar) > 0:
                     similar_preceding = []

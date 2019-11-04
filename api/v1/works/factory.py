@@ -3,7 +3,7 @@ from api.v1.works.html import html_dispatch
 from api.v1.works.txt import txt_dispatch
 from api.v1.xutils import xml_ns, flatten
 from api.v1.works.config import WorkConfig
-from api.v1.works.dts import make_resource_metadata
+from api.v1.works.metadata import make_passage_metadata, make_resource_metadata
 from lxml import etree
 import json
 import re
@@ -45,7 +45,7 @@ def transform(wid, xml_data):
     resources = []
     for node in enriched_index.iter('sal_node'):
         fragment = {}
-        dts_resource_metadata = make_resource_metadata(node, config)
+        dts_resource_metadata = make_passage_metadata(node, config)
         fragment.update(dts_resource_metadata)
         fragment['basic'] = False
         if node.get('basic') == 'true':
