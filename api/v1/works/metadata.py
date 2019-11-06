@@ -6,6 +6,7 @@ context = {
     '@vocab': 'https://www.w3.org/ns/hydra/core#',
     'dc': 'http://purl.org/dc/terms/',
     'dts': 'https://w3id.org/dts/api#',
+    'sal': 'https://api.salamanca.school/' # TODO point to an actual reference document here
 }
 
 
@@ -34,21 +35,36 @@ def make_passage_metadata(sal_node: etree._Element, config):
     # dts:passage: to be added downstream; @id: set dynamically based on request data
 
 
-def make_resource_metadata(tei_header: etree._Element, config):
+def make_resource_metadata(tei_header: etree._Element, config, wid: str):
     """Translates data from the teiHeader of a work to DTS+DC metadata for a DTS textual Resource"""
 
     # 1.) gather metadata
     # a) digital edition
     id = id_server + '/texts/' + config.get_wid()
     # TODO @id shouldn't be the same as the @id of the parent collection, but sth more specific
-    title = tei_header.xpath('tei:fileDesc/tei:titleStmt/tei:title[@type = "short"]', namespaces=xml_ns)[0]
-    alt_title = tei_header.xpath('tei:fileDesc/tei:titleStmt/tei:title[@type = "main"]', namespaces=xml_ns)[0]  # or short title here?
+    title = tei_header.xpath('tei:fileDesc/tei:titleStmt/tei:title[@type = "short"]/text()', namespaces=xml_ns)[0]
+    alt_title = tei_header.xpath('tei:fileDesc/tei:titleStmt/tei:title[@type = "main"]/text()', namespaces=xml_ns)[0]  # or short title here?
     author = '; '.join(format_person_names(tei_header.xpath('tei:fileDesc/tei:titleStmt/tei:author/tei:persName',
                                                   namespaces=xml_ns), reverse=False))
-    editors = format_person_names(tei_header.xpath('tei:fileDesc/tei:titleStmt/tei:editor/tei:persName',
-                                                   namespaces=xml_ns))
-    # TODO this currently makes no difference between scholarly, technical, and additional editors
+    scholarly_editors = format_person_names(tei_header.xpath('tei:fileDesc/tei:titleStmt/' +
+                                                             'tei:editor[contains(@role, "#scholarly")]/tei:persName',
+                                                             namespaces=xml_ns))
+    technical_editors = format_person_names(tei_header.xpath('tei:fileDesc/tei:titleStmt/' +
+                                                             'tei:editor[contains(@role, "#technical")]/tei:persName',
+                                                             namespaces=xml_ns))
+    editors = list(set(scholarly_editors + technical_editors))
     pub_date = get_publish_date(tei_header)
+    version = tei_header.xpath('tei:fileDesc/tei:editionStmt/tei:edition/@n', namespaces=xml_ns)[0]
+    series_volume = tei_header.xpath('tei:fileDesc/tei:seriesStmt/tei:biblScope[@unit = "volume"]/@n',
+                                     namespaces=xml_ns)[0]
+    rights_holder = {
+        '@id': 'https://id.salamanca.school',
+        'name': {
+            '@language': 'en',
+            '@value': 'The School of Salamanca'
+        }
+    }  # TODO provisional values
+    bibliographic_citation = make_bibliographic_citations(tei_header, wid)
 
     # b) print source
     source_title = tei_header.xpath('tei:fileDesc/tei:sourceDesc/tei:biblStruct/tei:monogr/tei:title[@type = "main"]/text()',
@@ -60,20 +76,24 @@ def make_resource_metadata(tei_header: etree._Element, config):
     for extent in source_extents:
         if exists(extent, '@xml:lang'):
             extent_i18n = {
-                '@language': extent.xpath('@xml:lang/string()', namespaces=xml_ns)[0],
+                '@language': extent.xpath('@xml:lang', namespaces=xml_ns)[0],
                 '@value': extent.xpath('text()')[0]
             }
             source_extents_i18n.append(extent_i18n)
         else:
             source_extents_i18n.append(extent.xpath('text()')[0])
     source_lang = []
-    for lang in tei_header.xpath('tei:profileDesc/tei:langUsage/tei:language/@ident/string()', namespaces=xml_ns):
+    for lang in tei_header.xpath('tei:profileDesc/tei:langUsage/tei:language/@ident', namespaces=xml_ns):
         source_lang.append(lang)
     source_pub_date = get_source_publish_date(tei_header)
+    source_pub_place = get_source_publish_place(tei_header)
+    source_repositories = get_source_repositories(tei_header)
 
     # c) other dts metadata
-    total_items = 0  # there are no members
+    total_items = 0 # TODO
+    dts_total_children = 0  # TODO
     dts_total_parents = 1  # resource is part only of the parent collection that represents the work
+    dts_cite_depth = config.get_cite_depth() # TODO multivol vs singlevol?
 
     # 2.) construct metadata object
     resource_metadata = {
@@ -81,38 +101,52 @@ def make_resource_metadata(tei_header: etree._Element, config):
         '@id': id,
         '@type': 'Resource',
         'title': title,
+        'totalItems': total_items,
+        'dts:totalParents': dts_total_parents,
+        'dts:totalChildren': dts_total_children,
+        'dts:citeDepth': dts_cite_depth,
         'dts:dublincore': {
             'dc:title': title,
             'dc:alternative': alt_title,
-            'dc:contributor': editors,  # TODO editors simply as "contributors"?
+            'dc:contributor': editors,  # TODO editors as "contributors"? information can be found also in sal:...Editors
             'dc:type': [
                 'http://purl.org/spar/fabio/work',
                 'dc:Text'
             ],
             'dc:created': pub_date,
+            'dc:bibliographicCitation': bibliographic_citation,
+            'dc:rightsHolder': rights_holder,
+            'dc:license': 'http://creativecommons.org/licenses/by/4.0/',
             'dc:source': {
-                'dc:title' : source_title,
+                'dc:title': source_title,
                 'dc:creator': author,
                 'dc:publisher': source_publishers,
                 'dc:format': source_extents_i18n,
-                'dv:language': source_lang,
+                'dc:language': source_lang,
                 'dc:created': source_pub_date
             }
+        },
+        'dts:extensions': {  # supplementary information that doesn't easily fit into dts/dc elements
+            'sal:version': version,  # the version of this edition of the text
+            'sal:scholarlyEditors': scholarly_editors,
+            'sal:technicalEditors': technical_editors,
+            # omitting "#additional" editors here
+            'sal:seriesVolume': series_volume,
+            'sal:sourcePublishPlace': source_pub_place,  # there seem to be no dc elements for this type of information...
+            'sal:sourceRepositories': source_repositories
         }
     }
-    # dc:hasPart for volumes? @id of volumes
     return resource_metadata
-    # TODO:
-    #  - publish place - is there
-    #  - hasVersion for expressing the version of this dig. edition
+    # TODO/questions:
+    #  - single volumes of multivolume works (dc:hasPart for volumes? @id of volumes)
+    #  - dts:references
+    #  - dts:passage
+    #  - dts:citeStructure (?)
+    #  - series editors?
     #  - dc:isFormatOf/dc:hasFormat?
-    #  - creator/publisher on top level as well?
     #  - additional/better values for dc:type?
     #  - https://www.dublincore.org/specifications/dublin-core/dcmi-terms/#terms-tableOfContent for TOC?
     #  - specify that we use iso639-1 for language codes? e.g., http://www.lexvo.org/page/iso639-1/la
-
-
-    pass
 
 
 def make_collection_metadata():
@@ -123,9 +157,52 @@ def make_collection_metadata():
 # UTIL FUNCTIONS FOR EXTRACTION OF METADATA
 
 
+def make_bibliographic_citations(tei_header: etree._Element, wid: str):
+    author_surname = tei_header.xpath('tei:fileDesc/tei:titleStmt/tei:author/tei:persName/tei:surname/text()',
+                                      namespaces=xml_ns)[0]
+    title = tei_header.xpath('tei:fileDesc/tei:titleStmt/tei:title[@type = "short"]/text()', namespaces=xml_ns)[0]
+    publish_year = tei_header.xpath('tei:fileDesc/tei:editionStmt/tei:edition/' +
+                                    'tei:date[@type = "digitizedEd" or @type = "summaryDigitizedEd"]/@when',
+                                    namespaces=xml_ns)[0][:4]  # getting year only
+    source_this_publish_year = tei_header.xpath('tei:fileDesc/tei:sourceDesc/tei:biblStruct/tei:monogr/' +
+                                             'tei:imprint/tei:date[@type = "thisEd"]/@when', namespaces=xml_ns)
+    source_first_publish_year = tei_header.xpath('tei:fileDesc/tei:sourceDesc/tei:biblStruct/tei:monogr/' +
+                                            'tei:imprint/tei:date[@type = "firstEd"]/@when', namespaces=xml_ns)
+    # assuming here that work_multivolume also have a date[@type = "firstEd|thisEd"], additional to their summary...Ed
+    source_publish_year = source_first_publish_year[0]
+    if len(source_this_publish_year):
+        source_publish_year = source_this_publish_year[0]
+    link = id_server + '/texts/' + wid
+    bibliographic_citations = []
+    for series_title in tei_header.xpath('tei:fileDesc/tei:seriesStmt/tei:title[@level = "s"]', namespaces=xml_ns):
+        lang = series_title.xpath('@xml:lang', namespaces=xml_ns)[0]
+        citation = author_surname + ', ' + title + '(' + publish_year + '[' + source_publish_year + ']), ' \
+                   + series_title.text + ' <' + link + '>'
+        citation_obj = {'@language': lang, '@value': citation}
+        bibliographic_citations.append(citation_obj)
+    return bibliographic_citations
+
+
+def get_source_repositories(tei_header: etree._Element):
+    repositories = []
+    for ms_identifier in tei_header.xpath('/tei:TEI/tei:teiHeader/tei:fileDesc/tei:sourceDesc/' +
+                                          'tei:msDesc/tei:msIdentifier', namespaces=xml_ns):
+        lang = ms_identifier.xpath('tei:repository/@xml:lang', namespaces=xml_ns)[0]
+        name = ms_identifier.xpath('tei:repository/text()', namespaces=xml_ns)[0]
+        link = ms_identifier.xpath('tei:idno[@type = "catlink"]/text()', namespaces=xml_ns)[0]
+        repo = {
+            'owner': {'@language': lang, '@value': name}, # TODO lod ID
+            'link': link
+        }
+        repositories.append(repo)
+    return repositories
+
+
 def get_publish_date(tei_header: etree._Element):
-    range = tei_header.xpath('tei:fileDesc/tei:publicationStmt/tei:date[@type = "summaryDigitizedEd"]')
-    date = tei_header.xpath('tei:fileDesc/tei:publicationStmt/tei:date[@type = "digitizedEd"]')
+    range = tei_header.xpath('tei:fileDesc/tei:editionStmt/tei:edition/tei:date[@type = "summaryDigitizedEd"]',
+                             namespaces=xml_ns)
+    date = tei_header.xpath('tei:fileDesc/tei:editionStmt/tei:edition/tei:date[@type = "digitizedEd"]/text()',
+                            namespaces=xml_ns)
     if len(range):
         return get_publish_date_range(range[0])
     else:
@@ -138,9 +215,9 @@ def get_source_publish_date(tei_header: etree._Element):
     first_range = tei_header.xpath('tei:fileDesc/tei:sourceDesc/tei:biblStruct/tei:monogr/' +
                                    'tei:imprint/tei:date[@type = "summaryFirstEd"]', namespaces=xml_ns)
     this_date = tei_header.xpath('tei:fileDesc/tei:sourceDesc/tei:biblStruct/tei:monogr/' +
-                                 'tei:imprint/tei:date[@type = "thisEd"]/@when/string()', namespaces=xml_ns)
+                                 'tei:imprint/tei:date[@type = "thisEd"]/@when', namespaces=xml_ns)
     first_date = tei_header.xpath('tei:fileDesc/tei:sourceDesc/tei:biblStruct/tei:monogr/' +
-                                  'tei:imprint/tei:date[@type = "firstEd"]/@when/string()', namespaces=xml_ns)
+                                  'tei:imprint/tei:date[@type = "firstEd"]/@when', namespaces=xml_ns)
     if len(this_range):
         return get_publish_date_range(this_range[0])
     elif len(first_range):
@@ -153,9 +230,9 @@ def get_source_publish_date(tei_header: etree._Element):
 
 def get_publish_date_range(date: etree._Element):
     if exists(date, '@from'):
-        date = {'start': date.xpath('@start/string()')[0]}
+        date = {'start': date.xpath('@start')[0]}
         if exists(date, '@to'):
-            date['to'] = date.xpath('@to/string()')[0]
+            date['to'] = date.xpath('@to')[0]
         return date
     else:
         return date.xpath('text()')[0]
@@ -174,6 +251,24 @@ def get_source_publishers(tei_header: etree._Element):
         return first_publishers
 
 
+def get_source_publish_place(tei_header: etree._Element):
+    this_place = tei_header.xpath('tei:fileDesc/tei:sourceDesc/tei:biblStruct/tei:monogr/' +
+                                  'tei:imprint/tei:pubPlace[@role = "thisEd"]', namespaces=xml_ns)
+    first_place = tei_header.xpath('tei:fileDesc/tei:sourceDesc/tei:biblStruct/tei:monogr/' +
+                                   'tei:imprint/tei:pubPlace[@role = "firstEd"]', namespaces=xml_ns)
+    if len(this_place):
+        return get_place_name(this_place[0])
+    else:
+        return get_place_name(first_place[0])
+
+
+def get_place_name(place_name: etree._Element):
+    if exists(place_name, '@key'):
+        return place_name.get('key')
+    else:
+        return place_name.text
+
+
 def format_person_names(person_names, reverse=False):
     """
     From each tei:name/tei:persName/... in person_names, extracts a full name of the form
@@ -184,7 +279,7 @@ def format_person_names(person_names, reverse=False):
     for person in person_names:
         name = ''
         if exists(person, '@key'):
-            name = person.xpath('@key/string()')[0]
+            name = person.xpath('@key')[0]
         elif exists(person, 'tei:surname and tei:forename'):
             surname = person.xpath('tei:surname/text()', namespaces=xml_ns)[0]
             forename = person.xpath('tei:forename/text()', namespaces=xml_ns)[0]
