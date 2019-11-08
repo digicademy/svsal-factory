@@ -34,8 +34,8 @@ class WorkFactoryEvent(Resource):
     def post(self, wid, path=''):
         start = time.time()
         print("Starting transformation, time: '%s'" % start)
-        xml_data = request.data #.decode('utf-8')
-        work_factory.transform(wid, xml_data)
+        request_data = request.data # TODO process request data (once they are available in a more extensive format)
+        work_factory.transform(wid, request_data)
         end = time.time()
         print("Ending transformation, time: '%s'" % end)
         print('Elapsed time: ', end - start)

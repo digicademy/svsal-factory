@@ -2,6 +2,10 @@ from lxml import etree
 from api.v1.xutils import xml_ns
 
 
+# preliminary path to works TEI until we have svsal-tei online:
+tei_works_path = 'tests/resources/in/svsal-tei/works'
+
+
 # TEMPORARY / DEBUGGING
 id_server = 'https://id.salamanca.school'
 image_server = 'https://facs.salamanca.school' # TODO

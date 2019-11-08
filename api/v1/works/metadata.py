@@ -138,7 +138,9 @@ def make_resource_metadata(tei_header: etree._Element, config, wid: str):
     }
     return resource_metadata
     # TODO/questions:
+    #  - dealing with unpublished works
     #  - single volumes of multivolume works (dc:hasPart for volumes? @id of volumes)
+    #  - root collection: automatically update when single work is processed, or should it have its own endpoint?
     #  - dts:references
     #  - dts:passage
     #  - dts:citeStructure (?)
@@ -149,7 +151,23 @@ def make_resource_metadata(tei_header: etree._Element, config, wid: str):
     #  - specify that we use iso639-1 for language codes? e.g., http://www.lexvo.org/page/iso639-1/la
 
 
-def make_collection_metadata():
+def make_work_collection_metadata(tei_header: etree._Element):
+    """Produces metadata for a DTS collection representing a single work or a (multivolume work's) volume."""
+    pass
+
+
+def make_multivolume_work_collection_metadata(tei_header: etree._Element):
+    """Produces metadata for a DTS (child) collection containing multiple 'works' (i.e., volumes). This can only be
+    used for creating metadata for a multivolume work, where each member is the collection for a single volume (see
+    make_work_collection_metadata)."""
+    pass
+
+
+def make_root_collection_metadata():
+    """Produces metadata for the DTS root collection that represents the corpus (i.e., the Digital Collection of Sources).
+    Each member is either a collection for a multivolume work (see make_multivolume_work_collection_metadata) that
+    contains multiple child collections representing the single volumes, or a collection representing a single-volume
+    work (see make_work_collection_metadata)."""
     pass
 
 
