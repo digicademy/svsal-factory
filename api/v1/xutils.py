@@ -1,11 +1,20 @@
 from lxml import etree
 import re
 
+# NAMESPACES
 
-xml_ns = {'xml': 'http://www.w3.org/XML/1998/namespace',
-          'tei': 'http://www.tei-c.org/ns/1.0',
-          'xi': 'http://www.w3.org/2001/XInclude'}
+basic_ns = {'xml': 'http://www.w3.org/XML/1998/namespace',
+            'xi':  'http://www.w3.org/2001/XInclude'}
+tei_ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+dts_ns = {'dts': 'https://w3id.org/dts/api#'}
 
+combined_ns = {}
+combined_ns.update(basic_ns)
+combined_ns.update(tei_ns)
+# omitting dts as a general namespace
+xml_ns = combined_ns
+
+# UTIL FUNCTIONS
 
 def flatten(l):
     for el in l:
@@ -57,6 +66,7 @@ def get_list_type(node):
     else:
         return ''
 
+
 def copy_attributes(from_elem: etree._Element, to_elem: etree._Element):
     for name, value in from_elem.items():
         to_elem.set(name, value)
@@ -73,3 +83,17 @@ def safe_xinclude(tree: etree._ElementTree):
     # converting to string seems to resolve duplicate/unexpanded nodes
 
 
+get_node_by_xmlid = etree.XPath('//*[@xml:id = $xmlid]', namespaces=xml_ns)
+
+
+def wrap_in_dts_fragment(content):
+    dts_fragment = etree.Element('{' + dts_ns['dts'] + '}' + 'fragment', nsmap=dts_ns)
+    if isinstance(content, etree._Element):
+        dts_fragment.append(content)
+    elif isinstance(content, str):
+        dts_fragment.text = content
+    return dts_fragment
+
+
+def make_dts_fragment_string(content):
+    return etree.tostring(wrap_in_dts_fragment(content), encoding='UTF-8')
