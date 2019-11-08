@@ -64,3 +64,12 @@ def copy_attributes(from_elem: etree._Element, to_elem: etree._Element):
 
 get_target_node = etree.XPath('ancestor::tei:TEI/tei:text//*[@xml:id = $id]', namespaces=xml_ns)
 
+
+def safe_xinclude(tree: etree._ElementTree):
+    """Tries to prevent problems with the lxml xinclude function, where unexpanded nodes sometimes still stick
+    in the tree after xinclusion."""
+    tree.xinclude()
+    return etree.fromstring(etree.tostring(tree.getroot()))
+    # converting to string seems to resolve duplicate/unexpanded nodes
+
+
