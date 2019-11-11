@@ -1,10 +1,8 @@
-from lxml import etree
-from api.v1.xutils import flatten, xml_ns, is_element, exists, get_xml_id, copy_attributes
+from api.v1.xutils import flatten, is_element, exists, get_xml_id, copy_attributes
 from api.v1.works.txt import txt_dispatch, normalize_space
 from api.v1.works.config import teaser_length as config_teaser_length, citation_labels
 from api.v1.works.fragmentation import *
-from api.v1.works.errors import NodeIndexingError, TEIMarkupError
-from xml.sax.saxutils import quoteattr
+from api.v1.errors import NodeIndexingError
 import re
 
 

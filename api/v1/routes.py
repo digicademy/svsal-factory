@@ -3,6 +3,7 @@ from flask import request
 from api.v1 import api_v1
 from api.tasks import async_api
 from api.v1.works import factory as work_factory
+from api.v1.docs import factory as doc_factory
 import time
 
 
@@ -36,6 +37,20 @@ class WorkFactoryEvent(Resource):
         print("Starting transformation, time: '%s'" % start)
         request_data = request.data # TODO process request data (once they are available in a more extensive format)
         work_factory.transform(wid, request_data)
+        end = time.time()
+        print("Ending transformation, time: '%s'" % end)
+        print('Elapsed time: ', end - start)
+        return {'answer': 'processed'}
+
+
+@api_v1.route('/docs/<string:did>')
+class WorkFactoryEvent(Resource):
+    @async_api
+    def post(self, id, path=''):
+        start = time.time()
+        print("Starting transformation, time: '%s'" % start)
+        request_data = request.data # TODO process request data (once they are available in a more extensive format)
+        doc_factory.transform(id, request_data)
         end = time.time()
         print("Ending transformation, time: '%s'" % end)
         print('Elapsed time: ', end - start)

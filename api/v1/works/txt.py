@@ -1,8 +1,8 @@
 from lxml import etree
 import re
-from api.v1.xutils import flatten, is_element, is_text_node, exists, xml_ns, get_xml_id
+from api.v1.xutils import flatten, is_element, is_text_node, exists, get_xml_id
 from api.v1.works.fragmentation import is_basic_elem, is_marginal_elem, is_structural_elem, has_basic_ancestor
-from api.v1.works.errors import TEIUnkownElementError
+from api.v1.errors import TEIUnkownElementError
 from api.v1.works.config import tei_text_elements
 
 import api.v1.works.factory as factory

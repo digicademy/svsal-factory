@@ -1,13 +1,9 @@
-from lxml import etree
-import re
-from api.v1.xutils import flatten, is_element, is_text_node, xml_ns, exists, get_list_type, get_xml_id, get_target_node
+from api.v1.xutils import xml_ns, get_list_type, get_target_node
 from api.v1.works.txt import *
-from api.v1.works.errors import TEIMarkupError, TEIUnkownElementError
+from api.v1.errors import TEIMarkupError, TEIUnkownElementError
 from api.v1.works.config import edit_class, orig_class, image_server, iiif_img_default_params, tei_text_elements, id_server
 from api.v1.works.fragmentation import is_list_elem, is_main_elem, is_basic_list_elem, is_page_elem, is_anchor_elem
 from api.v1.works.analysis import get_node_title
-from base64 import b64encode
-from os import urandom
 
 # TODO: simplify the following XPaths
 # determines whether hi occurs within a section with overwriting alignment information:
