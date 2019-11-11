@@ -35,7 +35,7 @@ def transform(wid: str, request_data):
         config.set_prefix_def(pd)
     text = root.xpath('child::tei:text', namespaces=xml_ns)[0]
 
-    # 1. INDEXING
+    # 1.) INDEXING
     # a) extract the basic structure of the text (i.e., the hierarchy of all relevant nodes), also building
     # preliminary citetrails
     index_nodes0 = flatten(extract_text_structure(wid, text))
@@ -45,11 +45,16 @@ def transform(wid: str, request_data):
     index0_str = etree.tostring(index0, pretty_print=True)
     with open('tests/resources/out/' + wid + "_index0.xml", "wb") as fo:
         fo.write(index0_str)
-    # b) make full citetrails
+    # b) enrich index (e.g., make full citetrails), and flatten nodes
     enriched_index = enrich_index(index0)
     index_str = etree.tostring(enriched_index, pretty_print=True)
     with open('tests/resources/out/' + wid + "_index.xml", "wb") as fo:
         fo.write(index_str)
+
+    # 2.) TOC and PAGINATION
+
+
+
 
     passages = []
     for node in enriched_index.iter('sal_node'):

@@ -27,6 +27,7 @@ def make_passage_metadata(sal_node: etree._Element, config):
             member_citetrail = config.get_citetrail_mapping(member_id)
             member.append({'dts:ref': member_citetrail})
         passage_metadata['member'] = member
+    passage_metadata['dts:citeType'] = sal_node.get('citeType')
     return passage_metadata
     # TODO sal:passage(trail)
     # first? last?

@@ -14,14 +14,23 @@ def extract_text_structure(wid, node):
         node_type = get_elem_type(node)
         if get_xml_id(node) and node_type:
             sal_node = etree.Element('sal_node')
+            name = etree.QName(node).localname
 
             # BASIC INFO
             sal_node.set('id', get_xml_id(node))
-            sal_node.set('name', etree.QName(node).localname)
+            sal_node.set('name', name)
             sal_node.set('type', node_type)
             is_basic = is_basic_elem(node)
             if is_basic:
                 sal_node.set('basic', 'true')
+
+            # CLASS & TYPE
+            # @class is deprecated atm
+            #node_class = get_node_class(node)
+            #sal_node.set('class', etree.QName(node).localname)
+            sal_node.set('citeType', get_cite_type(node, node_type))
+
+            # TODO ideally we would make use of an RDF class here (but loose fine-grained differentiability?)...
 
             # TITLE
             # TODO
@@ -86,6 +95,11 @@ def extract_text_structure(wid, node):
         pass
 
 
+# we need to query all *descendants*, not only children, for nodes referring to this node as parent; this
+# is due to specific nodes such as page and anchor nodes that do not refer to their immediate sal_node parent
+get_citable_children = etree.XPath('children/descendant::sal_node[@citetrailParent = $id]') # TODO does this work?
+
+
 def enrich_index(sal_index):
     from api.v1.works.factory import config
     enriched_index = etree.Element('sal_index')
@@ -101,11 +115,13 @@ def enrich_index(sal_index):
         node_count = node_count + 1
 
         # MEMBER (list of xml:id, separated by ';')
-        if exists(node, 'children'):
+        citable_children = get_citable_children(node, id=sal_node_id)
+        if len(citable_children):
             member = []
-            for m in node.xpath('children/child::sal_node[@citetrailParent = "' + sal_node_id + '"]'):
+            for m in citable_children:
                 member.append(m.get('id'))
             enriched_node.set('member', ';'.join(member))
+            # TODO this makes paragraphs and pb/milestones "within" those paragraphs appear on the same level
 
         # PREV/NEXT NODES
         # we set prev/next only for structural and main nodes
@@ -204,6 +220,14 @@ def enrich_index(sal_index):
     return enriched_index
 
 
+def extract_toc(enriched_index: etree._Element):
+    pass # TODO
+
+
+def extract_pagination(enriched_index: etree._Element):
+    pass # TODO
+
+
 # CITETRAIL UTIL FUNCTIONS
 
 
@@ -292,6 +316,7 @@ def get_citable_ancestors(node: etree._Element, node_type: str, mode: str):
                 ancestors.append(anc)
     return ancestors[::-1] # ancestors.reverse() is not working here
 
+
 # PASSAGETRAIL UTIL FUNCTIONS
 
 
@@ -348,7 +373,56 @@ def is_passagetrail_node(node):
 
 
 
-# NODE TITLE UTIL FUNCTIONS
+# NODE TITLE, CLASS, AND TYPE UTIL FUNCTIONS
+
+
+def get_cite_type(node: etree._Element, node_type: str) -> str:
+    """
+    Makes a dts:citeType string from a given element node.
+    (Note: the string values are really made up, perhaps a better alternative would be standardized classes
+    from RDF / ontologies.)
+    :param node: the element node for which to derive a citation type
+    :param node_type: the type of the node, as derived through get_elem_type()
+    :return: the string value for dts:citeType
+    """
+    name = etree.QName(node).localname
+    cite_type = 'section'
+    if name == 'div':
+        cite_type = citation_labels.get(node.get('type')).get('full')
+    elif name == 'milestone':
+        cite_type = citation_labels.get(node.get('unit')).get('full')
+    elif node_type == 'main':
+        if name == 'head':
+            cite_type = 'heading'
+        else:
+            cite_type = 'paragraph'
+    elif node_type == 'page':
+        cite_type = 'page'
+    elif node_type == 'marginal':
+        cite_type = 'note'
+    elif node_type == 'list':
+        if name == 'list':
+            cite_type = 'list'
+        else:
+            cite_type = 'item'  # TODO also includes head etc.
+    elif citation_labels.get(name):
+        cite_type = citation_labels.get(name)
+    return cite_type
+
+
+def get_node_class(node):
+    name = etree.QName(node).localname
+    node_class = name
+    if name == 'div':
+        node_class += '-' + node.get('type')
+    elif name == 'milestone':
+        node_class += '-' + node.get('unit')
+    elif name == 'text':
+        if node.get('type') == 'work_volume':
+            name += '-' + node.get('type')
+        elif get_xml_id(node) == 'completeWork':
+            name += '-complete_work'
+    return node_class
 
 
 def get_node_title(node):

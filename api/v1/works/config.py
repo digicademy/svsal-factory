@@ -44,7 +44,7 @@ citation_labels = {
         'law': {'full': 'lex', 'abbr' :'l.', 'isCiteRef': True},
         'lecture': {'full': 'relectio', 'abbr': 'relect.', 'isCiteRef': True},
         'partida': {'full': 'partida', 'abbr': 'part.', 'isCiteRef': True},
-        'map': (),
+        'map': (),  # does this really exist?
         'number': {'full': 'numerus', 'abbr': 'num.', 'isCiteRef': True}, # only in milestone
         'part': {'full': 'pars', 'abbr': 'pars', 'isCiteRef': True},
         'preface': {'full': 'praefatio', 'abbr': 'praef.', 'isCiteRef': True},
@@ -54,7 +54,7 @@ citation_labels = {
         'segment': {'full': 'sectio', 'abbr': 'sect.', 'isCiteRef': True},
         'source': {'full': 'sectio', 'abbr': 'sect.'},
         'title': {'full': 'titulus', 'abbr': 'tit.', 'isCiteRef': True},
-        'unknown': (),
+        'unknown': (),  # TODO validation
         'work_part': (),
         # other elements: local names
         'back': {'full': 'appendix', 'abbr': 'append.', 'isCiteRef': True},
@@ -64,6 +64,7 @@ citation_labels = {
         'p': {'full': 'paragraphus', 'abbr': 'paragr.', 'isCiteRef': True},
         'note': {'full': 'nota', 'abbr': 'not.', 'isCiteRef': True}
     }
+
 
 teaser_length = 60
 
