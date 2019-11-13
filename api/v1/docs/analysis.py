@@ -1,55 +1,124 @@
 from lxml import etree
 from api.v1.xutils import is_element, get_xml_id, xml_ns, flatten
-from api.v1.docs.fragmentation import is_basic_elem, is_structural_elem
-from api.v1.errors import NodeIndexingError
+from abc import ABC, abstractmethod
 
+"""
+Groups functionality for analyzing node types and making citetrails and other metadata into classes (for each doc type).
+"""
 
-def extract_structure(node, config):
-    if is_element(node):
-        if get_xml_id(node) and is_structural_elem(node):
-            sal_node = etree.Element('sal_node')
-            node_id = get_xml_id(node)
+class DocAnalysis(ABC):
 
-            # BASIC INFO
-            sal_node.set('id', node_id)
-            #sal_node.set('name', etree.QName(node).localname)
-            is_basic = is_basic_elem(node)
-            if is_basic:
-                sal_node.set('basic', 'true')
+    # NODE TYPES:
+    # in docs, there are generally 2 types of nodes: structural and basic nodes
 
-            # TITLE
-            # TODO?
-
-            # CITETRAIL (full)
-            # for the docs we make purely numeric citetrails (e.g. 1.2.3), regardless of the respective node's content
-            citetrail_preceding = [prec for prec in node.xpath('preceding-sibling::*') if is_structural_elem(prec)]
-            citetrail_ancestors = [anc for anc in node.xpath('ancestor::*') if is_structural_elem(anc)]
-            cite = str(len(citetrail_preceding) + 1)
-            citetrail = cite
-            if len(citetrail_ancestors):
-                citetrail_parent = citetrail_ancestors[::-1][0] # TODO does this work?
-                cp_citetrail = config.get_citetrail_mapping(get_xml_id(citetrail_parent))
-                citetrail = cp_citetrail + '.' + cite
-            config.put_citetrail_mapping(node_id, citetrail)
-
-            # LEVEL
-            level = len(citetrail_ancestors) + 1
-            sal_node.set('level', str(level))
-            if config.get_cite_depth() < level:
-                config.set_cite_depth(level)
-
-            # CHILD NODES
-            children = list(flatten([extract_structure(child, config) for child in node]))
-            if len(children) > 0:
-                sal_children = etree.Element('children')
-                for child in children:
-                    if etree.iselement(child):
-                        sal_children.append(child)
-                    elif isinstance(child, list):
-                        raise NodeIndexingError('Found list: ' + '; '.join(child) + ' instead of child::sal_node')
-                sal_node.append(sal_children)
-            return sal_node
-        else:
-            return [extract_structure(child, config) for child in node]
-    else:
+    @abstractmethod
+    def is_structural_node(self, node: etree.Element) -> bool:
+        """
+        Determines whether a node defines a structural section that contains other structural and/or basic nodes.
+        :param node: the node to be determined
+        :return: bool indicating whether the node is structural
+        """
         pass
+
+    @abstractmethod
+    def is_basic_node(self, node: etree.Element) -> bool:
+        """
+        Determines whether a node defines a basic text unit (such as a paragraph or a heading) that is not to be
+        further nested.
+        :param node: the node to be determined
+        :return: bool indicating whether the node is basic
+        """
+        pass
+
+    def get_node_type(self, node: etree.Element) -> str:
+        """
+        Gets the type of the node, expressed as a string. If the node is not relevant for doc indexing, the empty
+        string is returned.
+        :param node: the node to get the type for
+        :return: one of 'basic', 'structural', or the empty string ''
+        """
+        if self.is_structural_node(node):
+            return 'structural'
+        elif self.is_basic_node(node):
+            return 'basic'
+        else:
+            return ''
+
+    # TITLE
+
+    @abstractmethod
+    def make_title(self, node: etree.Element) -> str:
+        """
+        Makes the title for a node, based on its metadata (attributes) and/or content nodes (headings, etc.).
+        :return: the title
+        """
+        pass
+
+    # CITETRAILS:
+
+    @abstractmethod
+    def make_citetrail(self, node: etree._Element):
+        pass
+
+    @abstractmethod
+    def get_citetrail_ancestors(self, node: etree._Element):
+        pass
+
+
+class GuidelinesAnalysis(DocAnalysis):
+
+    structural_node_def = \
+        """
+        self::tei:div
+        """
+    basic_node_def = \
+        """
+        (
+        self::tei:p or
+        self::tei:head or
+        self::tei:list
+        ) and not(ancestor::*[
+            self::tei:p or
+            self::tei:head or
+            self::tei:list
+            ]
+        )
+        """
+
+    is_structural_node_xpath = etree.XPath(structural_node_def, namespaces=xml_ns)
+    is_basic_node_xpath = etree.XPath(basic_node_def, namespaces=xml_ns)
+
+    def is_structural_node(self, node: etree._Element) -> bool:
+        """
+        Wrapper function for is_structural_node_xpath, which determines whether a node is structural.
+        :param node: the node to be analyzed
+        :return: a bool indicating whether the node is structural
+        """
+        return self.is_structural_elem(node)
+
+    def is_basic_node(self, node: etree._Element) -> bool:
+        """
+        Wrapper function for is_basic_node_xpath, which determines whether a node is basic.
+        :param node: the node to be analyzed
+        :return: a bool indicating whether the node is basic
+        """
+        return self.is_basic_node(node)
+
+    def make_title(self, node: etree._Element) -> str:
+        return 'placeholder'  # TODO
+
+    def make_citetrail(self, node: etree._Element):
+        node_id = node.get('id')
+        citetrail_preceding = [prec for prec in node.xpath('preceding-sibling::*') if self.get_node_type(prec)]
+        citetrail_ancestors = [anc for anc in node.xpath('ancestor::*') if self.get_node_type(anc)]
+        cite = str(len(citetrail_preceding) + 1)
+        citetrail = cite
+        if len(citetrail_ancestors):
+            citetrail_parent = citetrail_ancestors[::-1][0]  # TODO does this work?
+            cp_citetrail = self.config.get_citetrail_mapping(get_xml_id(citetrail_parent))
+            citetrail = cp_citetrail + '.' + cite
+        return citetrail
+
+    def get_citetrail_ancestors(self, node: etree._Element):
+        return list([anc for anc in node.xpath('ancestor::*') if self.is_structural_node(anc)])[::-1]
+        # revert list so that ancestors are positioned relative to current node

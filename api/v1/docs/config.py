@@ -8,13 +8,13 @@ doc_id_filenames = {
     'faq': 'works-faq'
 }
 
+tei_docs_path = 'tests/resources/in/svsal-tei/revision'  # TODO
+
+
 class DocConfig:
 
-    tei_docs_path = 'tests/resources/in/svsal-tei/revision'  # TODO
-
-    def __init__(self, did: str, node_count=0):
+    def __init__(self, node_count=0):
         self.node_mappings = {}
-        self.did = did
         self.node_count = node_count
         self.cite_depth = 0
 

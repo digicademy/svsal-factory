@@ -7,4 +7,5 @@ TODO (roughly ordered by decreasing complexity):
     - sources (meta/sources-list.xml)
     (- search help, once it is updated/available)
     - faq (once available)
+    - project description
 """
