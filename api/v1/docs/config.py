@@ -4,7 +4,7 @@ doc_id_filenames = {
     'guidelines': 'works-general',
     'sources': 'sources-list',
     'chars': 'specialchars',
-    'team': 'projectteam',
+    'projectmembers': 'projectteam',
     'faq': 'works-faq'
 }
 

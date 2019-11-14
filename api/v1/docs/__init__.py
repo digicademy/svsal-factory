@@ -1,11 +1,11 @@
 
 """
 TODO (roughly ordered by decreasing complexity):
-    - edition guidelines (meta/works-general.xml)
-    - project team (meta/projectteam.xml)
-    - special characters (meta/specialchars.xml)
+    - guidelines (meta/works-general.xml)
+    - projectmembers (meta/projectteam.xml)
+    - specialchars (meta/specialchars.xml)
     - sources (meta/sources-list.xml)
-    (- search help, once it is updated/available)
+    (- searchhelp, once it is updated/available)
     - faq (once available)
-    - project description
+    - projectdesc (to be added to works-general or somewhere else)
 """

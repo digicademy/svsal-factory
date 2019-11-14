@@ -44,13 +44,13 @@ class WorkFactoryEvent(Resource):
 
 
 @api_v1.route('/docs/<string:did>')
-class WorkFactoryEvent(Resource):
+class DocFactoryEvent(Resource):
     @async_api
-    def post(self, id, path=''):
+    def post(self, did, path=''):
         start = time.time()
         print("Starting transformation, time: '%s'" % start)
         request_data = request.data # TODO process request data (once they are available in a more extensive format)
-        doc_factory.transform(id, request_data)
+        doc_factory.transform(did, request_data)
         end = time.time()
         print("Ending transformation, time: '%s'" % end)
         print('Elapsed time: ', end - start)

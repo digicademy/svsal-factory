@@ -21,7 +21,7 @@ def flatten(l):
         if isinstance(el, list) and not (isinstance(el, etree._Element)):
             yield from flatten(el)
         elif el is None:
-            yield ''
+            continue
         else:
             yield el
 
@@ -38,8 +38,9 @@ def is_text_node(node): # TODO is ElementStringResult really a simple text node?
 
 
 def is_element(node):
-    return isinstance(node, etree._Element) and not isinstance(node, etree._ProcessingInstruction)
-    # _ProcessingInstruction is a subsubclass of _Element
+    return isinstance(node, etree._Element) and not (isinstance(node, etree._ProcessingInstruction)
+                                                     or isinstance(node, etree._Comment))
+    # etree._ProcessingInstruction and etree._Comment are subsubclasses of etree._Element (!)
 
 
 def exists(elem: etree._Element, xpath_expr: str):

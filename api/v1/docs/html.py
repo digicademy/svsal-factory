@@ -8,17 +8,31 @@ class DocHTMLTransformer(ABC):
     """
 
     @abstractmethod
+    def __init__(self):
+        pass
+
+    @abstractmethod
     def transform_basic_node(self):
         pass
 
 
 class GuidelinesHTMLTransformer(DocHTMLTransformer):
-    pass
+
+    def __init__(self, config):
+        self.config = config
+
+    def transform_basic_node(self):
+        return 'test' # TODO
 
 
 class ProjectmembersHTMLTransformer(DocHTMLTransformer):
-    pass
+
+    def __init__(self, config):
+        self.config = config
+
+    def transform_basic_node(self):
+        return 'test' # TODO
 
 
-class ProjectdesHTMLTransformer(DocHTMLTransformer):
+class ProjectdescHTMLTransformer(DocHTMLTransformer):
     pass
