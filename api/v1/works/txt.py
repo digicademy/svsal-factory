@@ -304,6 +304,3 @@ def txt_orig_elem(node, mode):
     else:
         return ''
 
-
-def normalize_space(text):
-    return ' '.join(text.split())

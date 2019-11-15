@@ -98,3 +98,6 @@ def wrap_in_dts_fragment(content):
 
 def make_dts_fragment_string(content):
     return etree.tostring(wrap_in_dts_fragment(content), encoding='UTF-8')
+
+def normalize_space(text):
+    return ' '.join(text.split())
