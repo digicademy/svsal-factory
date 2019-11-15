@@ -34,5 +34,14 @@ class ProjectmembersHTMLTransformer(DocHTMLTransformer):
         return 'test' # TODO
 
 
+class SpecialcharsHTMLTransformer(DocHTMLTransformer):
+
+    def __init__(self, config):
+        self.config = config
+
+    def transform_basic_node(self):
+        return 'test' # TODO
+
+
 class ProjectdescHTMLTransformer(DocHTMLTransformer):
     pass

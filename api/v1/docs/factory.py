@@ -3,8 +3,9 @@ from api.v1.xutils import safe_xinclude, flatten
 from api.v1.errors import QueryValidationError
 from api.v1.xutils import is_element, get_xml_id
 from api.v1.errors import NodeIndexingError, QueryValidationError
-from api.v1.docs.analysis import DocAnalysis, GuidelinesAnalysis, ProjectmembersAnalysis
-from api.v1.docs.html import DocHTMLTransformer, GuidelinesHTMLTransformer, ProjectmembersHTMLTransformer
+from api.v1.docs.analysis import DocAnalysis, GuidelinesAnalysis, ProjectmembersAnalysis, SpecialcharsAnalysis
+from api.v1.docs.html import DocHTMLTransformer, GuidelinesHTMLTransformer, ProjectmembersHTMLTransformer, \
+    SpecialcharsHTMLTransformer
 from api.v1.docs.config import tei_docs_path
 from lxml import etree
 from abc import ABC, abstractmethod
@@ -15,9 +16,6 @@ class DocFactory(ABC):
     @abstractmethod
     def __init__(self, config: DocConfig):
         pass
-        #self.config = config
-        #self.analysis = DocAnalysis(config)
-        #self.html_transformer = html_transformer
 
     def make_structural_index(self, tei_root: etree._Element) -> etree._Element:
         """Creates an XML representation of the structure of a text, where relevant nodes are nested according
@@ -28,11 +26,6 @@ class DocFactory(ABC):
         struct_index_nodes = flatten(self.extract_structure(tei_root))
         struct_index = etree.Element('sal_index')
         for n in struct_index_nodes:
-            # for debugging:
-            #if not isinstance(n, str):
-            #    struct_index.append(n)
-            #else:
-            #    print('ERROR: found str: ' + n)
             struct_index.append(n)
         return struct_index
 
@@ -108,16 +101,25 @@ class ProjectmembersFactory(DocFactory):
         self.html_transformer = ProjectmembersHTMLTransformer(config)
 
 
+class SpecialcharsFactory(DocFactory):
+    def __init__(self, config: DocConfig):
+        self.config = config
+        self.analysis = SpecialcharsAnalysis(config)
+        self.html_transformer = SpecialcharsHTMLTransformer(config)
+
+
 def create_doc_factory(doc_id: str) -> DocFactory:
     """Creates a concrete DocFactory instance based on doc_id.
     :param doc_id: the id for the documentation type, as passed in from the client
-    :return: an instance of a concrete DocFactory, i.e. of a subclass of DocFactory
+    :return: an instance of a concrete DocFactory (i.e., of a subclass of DocFactory)
     """
     config = DocConfig()
     if doc_id == 'guidelines':
         return GuidelinesFactory(config)
     elif doc_id == 'projectmembers':
         return ProjectmembersFactory(config)
+    elif doc_id == 'specialchars':
+        return SpecialcharsFactory(config)
     else:
         return None  # TODO raise error?
 
@@ -145,7 +147,4 @@ def transform(doc_id: str, request_data):
     index_str = etree.tostring(structural_index, pretty_print=True)
     with open('tests/resources/out/' + doc_id + "_index.xml", "wb") as fo:
         fo.write(index_str)
-
-
-
 

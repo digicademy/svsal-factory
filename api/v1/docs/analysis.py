@@ -1,5 +1,5 @@
 from lxml import etree
-from api.v1.xutils import is_element, get_xml_id, xml_ns, flatten
+from api.v1.xutils import get_xml_id, xml_ns, exists
 from api.v1.docs.config import DocConfig
 from abc import ABC, abstractmethod
 
@@ -36,7 +36,6 @@ class DocAnalysis(ABC):
         """
         pass
 
-    #@abstractmethod
     def get_node_type(self, node: etree._Element) -> str:
         """
         Gets the type of the node, expressed as a string. If the node is not relevant for doc indexing, the empty
@@ -88,8 +87,7 @@ class GuidelinesAnalysis(DocAnalysis):
         self::tei:p or
         self::tei:head or
         self::tei:list
-        ) 
-        and ancestor::tei:text
+        )
         and not(ancestor::*[
             self::tei:p or
             self::tei:head or
@@ -98,7 +96,8 @@ class GuidelinesAnalysis(DocAnalysis):
         """
 
     __is_structural_node_xpath = etree.XPath(__structural_node_def, namespaces=xml_ns)
-    __is_basic_node_xpath = etree.XPath(__basic_node_def, namespaces=xml_ns)
+    __is_basic_node_xpath = etree.XPath(__basic_node_def + ' and ancestor::*[' + __structural_node_def + ']',
+                                        namespaces=xml_ns)
 
     def is_structural_node(self, node: etree._Element) -> bool:
         return self.__is_structural_node_xpath(node)
@@ -148,7 +147,8 @@ class ProjectmembersAnalysis(DocAnalysis):
             ])
         """
     __is_structural_node_xpath = etree.XPath(__structural_node_def, namespaces=xml_ns)
-    __is_basic_node_xpath = etree.XPath(__basic_node_def, namespaces=xml_ns)
+    __is_basic_node_xpath = etree.XPath(__basic_node_def + ' and ancestor::*[' + __structural_node_def + ']',
+                                        namespaces=xml_ns)
 
     def is_structural_node(self, node: etree._Element) -> bool:
         return self.__is_structural_node_xpath(node)
@@ -160,14 +160,40 @@ class ProjectmembersAnalysis(DocAnalysis):
         return 'placeholder'  # TODO
 
     def make_citetrail(self, node: etree._Element):
-        #node_id = node.get('id')
-        #citetrail_preceding = [prec for prec in node.xpath('preceding-sibling::*') if self.get_node_type(prec)]
-        #citetrail_ancestors = [anc for anc in node.xpath('ancestor::*') if self.get_node_type(anc)]
-        #cite = str(len(citetrail_preceding) + 1)
-        #citetrail = cite
-        #if len(citetrail_ancestors):
-        #    citetrail_parent = citetrail_ancestors[::-1][0]  # TODO does this work?
-        #    cp_citetrail = self.config.get_citetrail_mapping(get_xml_id(citetrail_parent))
-        #    citetrail = cp_citetrail + '.' + cite
-        #return citetrail
-        return 'placeholder'
+        return 'placeholder' # TODO
+
+
+class SpecialcharsAnalysis(DocAnalysis):
+
+    def __init__(self, config: DocConfig):
+        self.config = config
+
+    __structural_node_def = \
+        """
+            self::tei:charDecl[ancestor::tei:teiHeader]
+        """
+    __basic_node_def = \
+        """
+            self::tei:char
+        """
+    __is_structural_node_xpath = etree.XPath(__structural_node_def, namespaces=xml_ns)
+    __is_basic_node_xpath = etree.XPath(__basic_node_def + ' and ancestor::*[' + __structural_node_def + ']',
+                                        namespaces=xml_ns)
+
+    def is_structural_node(self, node: etree._Element) -> bool:
+        return self.__is_structural_node_xpath(node)
+
+    def is_basic_node(self, node: etree._Element) -> bool:
+        return self.__is_basic_node_xpath(node)
+
+    def make_title(self, node: etree._Element) -> str:
+        if exists('self::tei:charDecl'):
+            return str(node.xpath('ancestor::tei:teiheader/tei:fileDesc/tei:titleStmt/tei:title[@xml:lang = "en"]',
+                                  namespaces=xml_ns)[0]) # TODO i18n
+        elif exists('self::tei:char/tei:desc'):
+            return str(node.xpath('tei:desc/text()', namespaces=xml_ns)[0])
+        else:
+            return None
+
+    def make_citetrail(self, node: etree._Element):
+        return 'placeholder'  # TODO
