@@ -30,10 +30,11 @@ def extract_text_structure(wid, node):
             #sal_node.set('class', etree.QName(node).localname)
             sal_node.set('citeType', get_cite_type(node, node_type))
 
-            # TODO ideally we would make use of an RDF class here (but loose fine-grained differentiability?)...
-
-            # TITLE
-            # TODO
+            # NODE/SECTION TITLE
+            title = 'placeholder' # TODO
+            sal_title = etree.Element('title')
+            sal_title.text = title
+            sal_node.append(sal_title)
 
             # CITETRAIL (preliminary and yet not concatenated with node parent's citetrail)
             preliminary_cite = normalize_space(get_citetrail_prefix(node, node_type) + get_citetrail_infix(node, node_type))
@@ -225,7 +226,15 @@ def extract_toc(enriched_index: etree._Element):
 
 
 def extract_pagination(enriched_index: etree._Element):
-    pass # TODO
+    pages = []
+    for page_node in enriched_index.xpath('child::sal_node[@type = "page"]'):
+        print('Citetrail=' + page_node.get('citetrail'))
+        page_obj = {
+            'dts:ref': page_node.get('citetrail'),
+            'title': page_node.xpath('title/text()')[0]
+        }
+        pages.append(page_obj)
+    return pages
 
 
 # CITETRAIL UTIL FUNCTIONS
@@ -406,7 +415,7 @@ def get_cite_type(node: etree._Element, node_type: str) -> str:
         else:
             cite_type = 'item'  # TODO also includes head etc.
     elif citation_labels.get(name):
-        cite_type = citation_labels.get(name)
+        cite_type = citation_labels.get(name).get('full')
     return cite_type
 
 

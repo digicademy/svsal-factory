@@ -1,4 +1,4 @@
-from api.v1.works.analysis import extract_text_structure, enrich_index
+from api.v1.works.analysis import extract_text_structure, enrich_index, extract_pagination, extract_toc
 from api.v1.works.html import html_dispatch
 from api.v1.works.txt import txt_dispatch
 from api.v1.xutils import xml_ns, flatten, safe_xinclude, get_node_by_xmlid, make_dts_fragment_string
@@ -12,7 +12,7 @@ import re
 import io
 
 
-config = WorkConfig('', node_count=0) # TODO wid
+config = WorkConfig('', node_count=0)  # TODO wid
 
 
 def transform(wid: str, request_data):
@@ -26,7 +26,7 @@ def transform(wid: str, request_data):
 
     # TODO TEI validation
 
-    # put some technical metadata from the teiHeader into the config object
+    # put some technical metadata from the teiHeader into config
     tei_header = root.xpath('tei:teiHeader', namespaces=xml_ns)[0]
     char_decl = tei_header.xpath('descendant::tei:charDecl', namespaces=xml_ns)[0]
     config.set_chars(char_decl)
@@ -52,10 +52,11 @@ def transform(wid: str, request_data):
         fo.write(index_str)
 
     # 2.) TOC and PAGINATION
+#    pages = extract_pagination(enriched_index)
+#    with open('tests/resources/out/' + wid + '_pages.json', 'w') as fo:
+#        fo.write(json.dumps(pages, indent=4))
 
-
-
-
+    # 3.) PASSAGES
     passages = []
     for node in enriched_index.iter('sal_node'):
         fragment = {}
@@ -87,6 +88,7 @@ def transform(wid: str, request_data):
     with open('tests/resources/out/' + wid + '_resources.json', 'w') as fo:
         fo.write(json.dumps(passages, indent=4))
 
+    # 4.) WORK/VOLUME METADATA
     resource_metadata = make_resource_metadata(tei_header, config, wid)
     with open('tests/resources/out/' + wid + '_metadata.json', 'w') as fo:
         fo.write(json.dumps(resource_metadata, indent=4))

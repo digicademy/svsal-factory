@@ -5,6 +5,9 @@ from api.v1.works.config import edit_class, orig_class, image_server, iiif_img_d
 from api.v1.works.fragmentation import is_list_elem, is_main_elem, is_basic_list_elem, is_page_elem, is_anchor_elem
 from api.v1.works.analysis import get_node_title
 
+#class WorkHTMLTransformer:
+
+
 # TODO: simplify the following XPaths
 # determines whether hi occurs within a section with overwriting alignment information:
 hi_is_within_specific_alignment_section = \
@@ -101,7 +104,7 @@ def html_append_children(html_elem, children):
 
 
 def html_text_node(node):
-    return re.sub(r'\s+', ' ', str(node)) # same as txt
+    return re.sub(r'\s+', ' ', str(node))
 
 
 # TEI->HTML ELEMENT FUNCTIONS
@@ -128,7 +131,8 @@ def html_byline(node):
 
 
 def html_cb(node):
-    return txt_cb(node, None)
+    if not node.get('break') == 'no':
+        return ' '
 
 
 def html_cell(node):
@@ -333,7 +337,8 @@ def html_label(node):
 
 
 def html_lb(node):
-    return txt_lb(node, None)
+    if not node.get('break') == 'no':
+        return ' '
 
 
 def html_lg(node):
@@ -481,7 +486,8 @@ def html_signed(node):
 
 
 def html_space(node):
-    return txt_space(node, None)
+    if node.get('dim') == 'horizontal' or node.get('rendition') == '#h-gap':
+        return ' '
 
 
 def html_supplied(node):
