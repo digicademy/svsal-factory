@@ -1,9 +1,7 @@
 from api.v1.xutils import flatten, is_element, exists, get_xml_id, copy_attributes, xml_ns, normalize_space
-from api.v1.works.txt import txt_dispatch
 from api.v1.works.config import teaser_length as config_teaser_length, citation_labels
-from api.v1.works.fragmentation import *
-from api.v1.errors import NodeIndexingError
 from api.v1.works.config import WorkConfig
+from api.v1.works.txt import WorkTXTTransformer
 from lxml import etree
 import re
 
@@ -12,6 +10,7 @@ class WorkAnalysis:
 
     def __init__(self, config: WorkConfig):
         self.config = config
+        self.txt_transformer = None  # needs to be initialized after instantiation
 
     # NODE DEFINITIONS:
 
@@ -418,7 +417,8 @@ class WorkAnalysis:
         return title
 
     def make_node_teaser(self, elem):
-        normalized_text = normalize_space(re.sub(r'\{.*?\}', '', re.sub(r'\[.*?\]', '', txt_dispatch(elem, 'edit'))))
+        normalized_text = normalize_space(re.sub(r'\{.*?\}', '', re.sub(r'\[.*?\]', '',
+                                                                        self.txt_transformer.dispatch(elem, 'edit'))))
         if len(normalized_text) > config_teaser_length:
             shortened = normalize_space(normalized_text[:config_teaser_length])
             return '"' + shortened + '…"'

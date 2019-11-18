@@ -3,14 +3,12 @@ import re
 from api.v1.xutils import flatten, is_element, exists, get_xml_id, is_text_node
 from api.v1.errors import TEIUnkownElementError
 from api.v1.works.config import WorkConfig, tei_text_elements
-from api.v1.works.analysis import WorkAnalysis
-
-import api.v1.works.factory as factory
+#from api.v1.works.analysis import WorkAnalysis
 
 
 class WorkTXTTransformer:
 
-    def __init__(self, config: WorkConfig, analysis: WorkAnalysis):
+    def __init__(self, config: WorkConfig, analysis):
         self.config = config
         self.analysis = analysis
 
@@ -20,13 +18,13 @@ class WorkTXTTransformer:
             # we pass the node through
             elem_function = getattr(self, 'transform_' + etree.QName(node).localname.lower(), None)
             if callable(elem_function):
-                return elem_function(node)  # globals()[etree.QName(node).localname.lower()](node)
+                return elem_function(node, mode)  # globals()[etree.QName(node).localname.lower()](node)
             elif etree.QName(node).localname in tei_text_elements:
                 return self.passthru(node, mode)
             else:
                 raise TEIUnkownElementError('Unknown element: ' + etree.QName(node).localname)
         elif is_text_node(node):
-            return self.transform_text_node(node)
+            return self.transform_text_node(node, mode)
         else:
             return ''
         # omit comments and processing instructions
@@ -92,7 +90,7 @@ class WorkTXTTransformer:
         return ''
 
     def transform_g(self, node, mode):
-        char = factory.config.get_chars()[node.get('ref')[1:]]
+        char = self.config.get_chars()[node.get('ref')[1:]]
         if mode == 'orig':
             if char.get('precomposed'):
                 return char['precomposed']
@@ -161,8 +159,8 @@ class WorkTXTTransformer:
         else: # mode == 'edit'
             if node.get('n') and not re.match(r'^[\d\[\]]+$', node.get('n')): # @n is not a number
                 return '[' + node.get('n') + ']'
-            elif node.get('n') and factory.config.get_citation_labels()[node.get('unit')]['abbr']: # @n is a number
-                return '[' + factory.config.get_citation_labels()[node.get('unit')]['abbr'] + ' ' + node.get('n') + ']'
+            elif node.get('n') and self.config.get_citation_labels()[node.get('unit')]['abbr']: # @n is a number
+                return '[' + self.config.get_citation_labels()[node.get('unit')]['abbr'] + ' ' + node.get('n') + ']'
             else:
                 return '[*]'
 

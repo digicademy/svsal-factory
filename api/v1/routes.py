@@ -35,7 +35,7 @@ class WorkFactoryEvent(Resource):
     def post(self, wid, path=''):
         start = time.time()
         print("Starting transformation, time: '%s'" % start)
-        request_data = request.data # TODO process request data (once they are available in a more extensive format)
+        request_data = request.data  # TODO process request data (once they are available in a more extensive format)
         work_factory.transform(wid, request_data)
         end = time.time()
         print("Ending transformation, time: '%s'" % end)

@@ -4,13 +4,15 @@ from api.v1.errors import TEIMarkupError, TEIUnkownElementError
 from api.v1.works.config import edit_class, orig_class, image_server, iiif_img_default_params, tei_text_elements, \
     id_server, WorkConfig
 from api.v1.works.analysis import WorkAnalysis
+from api.v1.works.txt import WorkTXTTransformer
 
 
 class WorkHTMLTransformer:
 
-    def __init__(self, config: WorkConfig, analysis: WorkAnalysis):
+    def __init__(self, config: WorkConfig, analysis: WorkAnalysis, txt_transformer: WorkTXTTransformer):
         self.config = config
         self.analysis = analysis
+        self.txt_transformer = txt_transformer
 
     # TODO: simplify the following XPaths
     # determines whether hi occurs within a section with overwriting alignment information:
@@ -68,7 +70,7 @@ class WorkHTMLTransformer:
                 elif self.analysis.is_anchor_node(child) or exists(node, 'self::tei:milestone'): # also include milestones that are not "anchors"
                     children.append(self.transform_milestone_inline(child))
                 elif self.analysis.is_marginal_node(child):
-                    children.append(self.transform_make_marginal_inline(child))
+                    children.append(self.make_marginal_inline(child))
                 # the following shouldn't be the case, but we apply it as a safety filter in case self.dispatch
                 # has been called from above the "basic" level:
                 elif not (self.analysis.is_basic_node(child) or self.analysis.is_structural_node(child) \
@@ -190,7 +192,7 @@ class WorkHTMLTransformer:
         if not node.text:
             raise TEIMarkupError('tei:g does not contain text')
         char_code = node.get('ref')[1:]
-        char = factory.config.get_chars()[char_code]
+        char = self.config.get_chars()[char_code]
         orig_glyph = char.get('precomposed')
         if char.get('composed'):
             orig_glyph = char.get('composed')
@@ -307,7 +309,7 @@ class WorkHTMLTransformer:
 
     def transform_label(self, node):
         if self.analysis.is_marginal_node(node):
-            return self.transform_make_marginal(node)
+            return self.make_marginal(node)
         elif node.get('place') == 'inline':
             return self.passthru_append(node, self.make_element_with_class('span', 'label-inline'))
         # TODO other types of nodes, such as dict labels
@@ -341,7 +343,7 @@ class WorkHTMLTransformer:
 
     def transform_note(self, node):
         if self.analysis.is_marginal_node(node):
-            return self.transform_make_marginal(node)
+            return self.make_marginal(node)
         else:
             raise TEIMarkupError('Unknown type of tei:note')
 
@@ -394,7 +396,7 @@ class WorkHTMLTransformer:
             # TODO i18n 'View image of ' + title
             page_link.append(self.make_element_with_class('i', 'fas fa-book-open'))
             label = self.make_element_with_class('span', 'page-label')
-            label.text = self.get_node_title(node)
+            label.text = self.analysis.get_node_title(node)
             page_link.append(label)
             return page_link
             # TODO data-canvas / render:resolveCanvasID !
@@ -449,8 +451,8 @@ class WorkHTMLTransformer:
             return ' '
 
     def transform_supplied(self, node):
-        orig_text = txt_passthru(node, 'orig')
-        edit_text = txt_passthru(node, 'edit')
+        orig_text = self.txt_transformer.passthru(node, 'orig')
+        edit_text = self.txt_transformer.passthru(node, 'edit')
         orig_span = self.make_element_with_class('span', orig_class + ' hidden supplied')
         orig_span.set('title', edit_text) # assuming that title is not too long...
         orig_span.text = '[' + orig_text + ']' # omitting any markup information here
@@ -603,7 +605,7 @@ class WorkHTMLTransformer:
         if exists(node, 'parent::tei:choice'):
             edit_elem = node.xpath('parent::tei:choice/*[self::tei:expan or self::tei:reg or self::tei:corr]',
                                    namespaces=xml_ns)[0]
-            edit_str = txt_dispatch(edit_elem, 'edit')
+            edit_str = self.txt_transformer.dispatch(edit_elem, 'edit')
             span = self.make_element_with_class('span', orig_class + ' ' + etree.QName(node).localname)
             span.set('title', edit_str)
             return self.passthru_append(node, span)

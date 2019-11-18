@@ -1,38 +1,43 @@
 from api.v1.works.analysis import WorkAnalysis
-from api.v1.works.html import html_dispatch
-from api.v1.works.txt import txt_dispatch
 from api.v1.xutils import xml_ns, flatten, safe_xinclude, get_node_by_xmlid, make_dts_fragment_string, is_element, \
     get_xml_id, normalize_space, exists, copy_attributes
 from api.v1.works.config import WorkConfig, tei_works_path
-from api.v1.works.metadata import make_passage_metadata, make_resource_metadata
-from api.v1.works.tei import wrap_tei_node_in_ancestors
 from api.v1.errors import NodeIndexingError
+from api.v1.works.tei import WorkTEITransformer
+from api.v1.works.html import WorkHTMLTransformer
+from api.v1.works.txt import WorkTXTTransformer
+from api.v1.works.metadata import WorkMetadataTransformer
 from lxml import etree
 import json
 from copy import deepcopy
 import re
-import io
 
 
 class WorkFactory:
 
     def __init__(self, config: WorkConfig):
         self.config = config
-        self.analysis = WorkAnalysis()
+        self.analysis = WorkAnalysis(self.config)
+        self.tei_transformer = WorkTEITransformer(config=self.config, analysis=self.analysis)
+        self.txt_transformer = WorkTXTTransformer(config=self.config, analysis=self.analysis)
+        self.html_transformer = WorkHTMLTransformer(config=self.config, analysis=self.analysis,
+                                                    txt_transformer=self.txt_transformer)
+        self.metadata_transformer = WorkMetadataTransformer(config=self.config, analysis=self.analysis)
 
     def make_structural_index(self, tei_text: etree._Element) -> etree._Element:
         """Creates an XML representation of the structure of a text, where relevant nodes are nested according
         to their original hierarchy and enriched with meta information.
-        :param tei_root: the TEI root node of the document for which to create the index
+        :param tei_text: the tei:text node of the document for which to create the index
         :return: the root node of the newly created index
         """
+        print('1')
         struct_index_nodes = flatten(self.extract_structure(tei_text))
         struct_index = etree.Element('sal_index')
         for n in struct_index_nodes:
             struct_index.append(n)
         return struct_index
 
-    def extract_structure(self, wid, node):
+    def extract_structure(self, node):
         if is_element(node):
             node_type = self.analysis.get_node_type(node)
             if get_xml_id(node) and node_type:
@@ -74,9 +79,8 @@ class WorkFactory:
                 # LEVEL
                 level = len(citetrail_ancestors) + 1
                 sal_node.set('level', str(level))  # TODO does this work with marginals and pages?
-                from api.v1.works.factory import config
-                if config.get_cite_depth() < level:
-                    config.set_cite_depth(level)
+                if self.config.get_cite_depth() < level:
+                    self.config.set_cite_depth(level)
 
                 # PASSAGETRAIL (preliminary and not yet concatenated with parent's passagetrail)
                 if self.analysis.is_passagetrail_node(node):
@@ -103,7 +107,7 @@ class WorkFactory:
                     # TODO: some information about the kind of list (get_list_type)? in items or list?
 
                 # CHILD NODES
-                children = list(flatten([self.extract_structure(wid, child) for child in node]))
+                children = list(flatten([self.extract_structure(child) for child in node]))
                 # TODO sal_title: note titles (as well as citetrails) need to be suffixed by their position / number
                 if len(children) > 0:
                     sal_children = etree.Element('children')
@@ -115,7 +119,7 @@ class WorkFactory:
                     sal_node.append(sal_children)
                 return sal_node
             else:
-                return [self.extract_structure(wid, child) for child in node]
+                return [self.extract_structure(child) for child in node]
         else:
             pass
 
@@ -254,23 +258,24 @@ class WorkFactory:
         return pages
 
 
-
-def transform(wid: str, request_data):
+def transform(work_id: str, request_data):
 
     # 0.) get, parse, and expand the xml dataset
     parser = etree.XMLParser(attribute_defaults=False, no_network=False, ns_clean=True, remove_blank_text=False,
                              remove_comments=False, remove_pis=False, compact=False, collect_ids=True,
                              resolve_entities=False, huge_tree=False, encoding='UTF-8')  # huge_tree=True, ns_clean=False ?
-    tree = etree.parse(tei_works_path + '/' + wid + '.xml', parser)  # TODO url
+    tree = etree.parse(tei_works_path + '/' + work_id + '.xml', parser)  # TODO url
     tei_root = safe_xinclude(tree)
     tei_header = tei_root.xpath('tei:teiHeader', namespaces=xml_ns)[0]
     tei_text = tei_root.xpath('child::tei:text', namespaces=xml_ns)[0]
 
-    # 1.) Setup
-    config = WorkConfig(node_count=0)
-    factory = WorkFactory(config)
-
     # TODO TEI validation
+
+    # 1.) Setup
+    config = WorkConfig(wid=work_id, node_count=0)
+    factory = WorkFactory(config)
+    # workaround for circular initialization of txt_transformer and analysis:
+    factory.analysis.txt_transformer = factory.txt_transformer
 
     # put some technical metadata from the teiHeader into config
 
@@ -285,12 +290,12 @@ def transform(wid: str, request_data):
     # preliminary citetrails
     structural_index = factory.make_structural_index(tei_text)
     # for debugging:
-    with open('tests/resources/out/' + wid + "_index0.xml", "wb") as fo:
+    with open('tests/resources/out/' + work_id + "_index0.xml", "wb") as fo:
         fo.write(etree.tostring(structural_index, pretty_print=True))
     # b) enrich index (e.g., make full citetrails), and flatten nodes
     enriched_index = factory.enrich_index(structural_index)
     # for debugging:
-    with open('tests/resources/out/' + wid + "_index.xml", "wb") as fo:
+    with open('tests/resources/out/' + work_id + "_index.xml", "wb") as fo:
         fo.write(etree.tostring(enriched_index, pretty_print=True))
 
     # 2.) TOC and PAGINATION
@@ -302,7 +307,7 @@ def transform(wid: str, request_data):
     passages = []
     for node in enriched_index.iter('sal_node'):
         fragment = {}
-        dts_resource_metadata = make_passage_metadata(node, config)
+        dts_resource_metadata = factory.metadata_transformer.make_passage_metadata(node, config)
         fragment.update(dts_resource_metadata)
         fragment['basic'] = False
         # for now, add txt, html etc. only if node is "basic"
@@ -312,13 +317,13 @@ def transform(wid: str, request_data):
             # root.xpath('//*[@xml:id = "' + node_id + '"]', namespaces=xml_ns)[0]
             tei_node = get_node_by_xmlid(tei_root, xmlid=node_id)[0]
             # TXT
-            txt_edit = make_dts_fragment_string(txt_dispatch(tei_node, 'edit'))
-            txt_orig = make_dts_fragment_string(txt_dispatch(tei_node, 'orig'))
+            txt_edit = make_dts_fragment_string(factory.txt_transformer.dispatch(tei_node, 'edit'))
+            txt_orig = make_dts_fragment_string(factory.txt_transformer.dispatch(tei_node, 'orig'))
             # HTML
-            html_node = html_dispatch(tei_node) # this assumes that there is exactly 1 html result node
+            html_node = factory.html_transformer.dispatch(tei_node) # this assumes that there is exactly 1 html result node
             html = make_dts_fragment_string(html_node)
             # TEI
-            tei_node_with_ancestors = wrap_tei_node_in_ancestors(tei_node, deepcopy(tei_node))
+            tei_node_with_ancestors = factory.tei_transformer.wrap_tei_node_in_ancestors(tei_node, deepcopy(tei_node))
             tei = make_dts_fragment_string(tei_node_with_ancestors)
             # aggregate:
             content = {'txt_edit': str(txt_edit, encoding='UTF-8'),
@@ -327,10 +332,10 @@ def transform(wid: str, request_data):
                        'tei': str(tei, encoding='UTF-8')}
             fragment.update(content)
         passages.append(fragment)
-    with open('tests/resources/out/' + wid + '_resources.json', 'w') as fo:
+    with open('tests/resources/out/' + work_id + '_resources.json', 'w') as fo:
         fo.write(json.dumps(passages, indent=4))
 
     # 4.) WORK/VOLUME METADATA
-    resource_metadata = make_resource_metadata(tei_header, config, wid)
-    with open('tests/resources/out/' + wid + '_metadata.json', 'w') as fo:
+    resource_metadata = factory.metadata_transformer.make_resource_metadata(tei_header, config, work_id)
+    with open('tests/resources/out/' + work_id + '_metadata.json', 'w') as fo:
         fo.write(json.dumps(resource_metadata, indent=4))
