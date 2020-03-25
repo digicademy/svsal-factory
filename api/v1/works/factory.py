@@ -264,13 +264,13 @@ def transform(work_id: str, request_data):
     parser = etree.XMLParser(attribute_defaults=False, no_network=False, ns_clean=True, remove_blank_text=False,
                              remove_comments=False, remove_pis=False, compact=False, collect_ids=True,
                              resolve_entities=False, huge_tree=False, encoding='UTF-8')  # huge_tree=True, ns_clean=False ?
-    tree = etree.parse(tei_works_path + '/' + work_id + '.xml', parser)  # TODO url
-    tei_root = safe_xinclude(tree)
+    #tree = etree.parse(tei_works_path + '/' + work_id + '.xml', parser)  # TODO url
+    tei_root = etree.fromstring(request_data, parser)
+    #tei_root = safe_xinclude(tree)
     tei_header = tei_root.xpath('tei:teiHeader', namespaces=xml_ns)[0]
     tei_text = tei_root.xpath('child::tei:text', namespaces=xml_ns)[0]
 
     # TODO TEI validation
-
     # 1.) Setup
     config = WorkConfig(wid=work_id, node_count=0)
     factory = WorkFactory(config)
@@ -290,16 +290,18 @@ def transform(work_id: str, request_data):
     # preliminary citetrails
     structural_index = factory.make_structural_index(tei_text)
     # for debugging:
-    with open('tests/resources/out/' + work_id + "_index0.xml", "wb") as fo:
-        fo.write(etree.tostring(structural_index, pretty_print=True))
+    #with open('tests/resources/out/' + work_id + "_index0.xml", "wb") as fo:
+    #    fo.write(etree.tostring(structural_index, pretty_print=True))
+
     # b) enrich index (e.g., make full citetrails), and flatten nodes
     enriched_index = factory.enrich_index(structural_index)
     # for debugging:
-    with open('tests/resources/out/' + work_id + "_index.xml", "wb") as fo:
-        fo.write(etree.tostring(enriched_index, pretty_print=True))
+    #with open('tests/resources/out/' + work_id + "_index.xml", "wb") as fo:
+    #    fo.write(etree.tostring(enriched_index, pretty_print=True))
 
-    # 2.) TOC and PAGINATION
+    # 2.) TOC and PAGINATION (TODO not yet fully working)
 #    pages = extract_pagination(enriched_index)
+    # for debugging:
 #    with open('tests/resources/out/' + wid + '_pages.json', 'w') as fo:
 #        fo.write(json.dumps(pages, indent=4))
 
@@ -332,10 +334,15 @@ def transform(work_id: str, request_data):
                        'tei': str(tei, encoding='UTF-8')}
             fragment.update(content)
         passages.append(fragment)
-    with open('tests/resources/out/' + work_id + '_resources.json', 'w') as fo:
-        fo.write(json.dumps(passages, indent=4))
+    # for debugging:
+    #with open('tests/resources/out/' + work_id + '_resources.json', 'w') as fo:
+    #    fo.write(json.dumps(passages, indent=4))
 
     # 4.) WORK/VOLUME METADATA
     resource_metadata = factory.metadata_transformer.make_resource_metadata(tei_header, config, work_id)
-    with open('tests/resources/out/' + work_id + '_metadata.json', 'w') as fo:
-        fo.write(json.dumps(resource_metadata, indent=4))
+
+    # 5.) return to routes.py:
+    return {'work_metadata': resource_metadata, 'work_passages': passages}
+    # for debugging:
+    #with open('tests/resources/out/' + work_id + '_metadata.json', 'w') as fo:
+    #    fo.write(json.dumps(resource_metadata, indent=4))

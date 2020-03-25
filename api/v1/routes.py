@@ -5,6 +5,7 @@ from api.tasks import async_api
 from api.v1.works import factory as work_factory
 from api.v1.docs import factory as doc_factory
 import time
+from flask import jsonify
 
 
 # ++++ V1 ROUTES ++++
@@ -16,6 +17,8 @@ class HelloWorld(Resource):
         return {'status': 'test_ok'}
 
 
+# for debugging async requests: API should return 202 "accepted" and provide a lookup link in the Location header,
+# where status information and the final response are to be found
 @api_v1.route('/testasync')
 class LongRunningTask(Resource):
     @async_api
@@ -36,12 +39,12 @@ class WorkFactoryEvent(Resource):
         start = time.time()
         print("Starting transformation, time: '%s'" % start)
         request_data = request.data  # TODO process request data (once they are available in a more extensive format)
-        work_factory.transform(wid, request_data)
+        #work_factory.transform(wid, request_data)
+        resp = work_factory.transform(wid, request_data)
         end = time.time()
         print("Ending transformation, time: '%s'" % end)
         print('Elapsed time: ', end - start)
-        return {'answer': 'processed'}
-
+        return jsonify(resp)
 
 @api_v1.route('/docs/<string:did>')
 class DocFactoryEvent(Resource):
