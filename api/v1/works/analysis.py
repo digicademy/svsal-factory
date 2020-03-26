@@ -426,6 +426,6 @@ class WorkAnalysis:
             return '"' + normalized_text + '"'
 
     """
-    TODOs:
+    TODO:
         - HTML title
     """
