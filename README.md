@@ -49,7 +49,7 @@ the derivation of webdata more difficult to maintain and adjust in the long run.
 
 1.) Clone the repo, create a virtual environment, and install basic requirements:
 
-`git clone https://github.com/dvglc/svsal-factory.git`
+`git clone https://github.com/digicademy/svsal-factory.git`
 
 `cd svsal-factory`
 
